@@ -5,25 +5,11 @@ import { nextCookies } from "better-auth/next-js";
 import { transporter } from "@/lib/nodemailer";
 import { PASSWORD_RESET_EMAIL_TEMPLATE } from "@/lib/nodemailer/templates";
 
-let authInstance: ReturnType<typeof betterAuth> | null = null;
+type MongoDb = Parameters<typeof mongodbAdapter>[0];
 
-export const getAuth = async () => {
-  if (authInstance) return authInstance;
-
-  const mongoose = await connectToDatabase();
-  const db = mongoose.connection.db;
-
-  if (!db) throw new Error("MongoDB connection not found");
-
-  const secret = process.env.BETTER_AUTH_SECRET;
-  const baseURL = process.env.BETTER_AUTH_URL;
-
-  if (!secret || !baseURL) {
-    throw new Error("BETTER_AUTH_SECRET and BETTER_AUTH_URL must be set");
-  }
-
-  authInstance = betterAuth({
-    database: mongodbAdapter(db as Parameters<typeof mongodbAdapter>[0]),
+const createAuth = (db: MongoDb, secret: string, baseURL: string) =>
+  betterAuth({
+    database: mongodbAdapter(db),
     secret,
     baseURL,
     emailAndPassword: {
@@ -64,7 +50,24 @@ export const getAuth = async () => {
     plugins: [nextCookies()],
   });
 
+let authInstance: ReturnType<typeof createAuth> | null = null;
+
+export const getAuth = async () => {
+  if (authInstance) return authInstance;
+
+  const mongoose = await connectToDatabase();
+  const db = mongoose.connection.db;
+
+  if (!db) throw new Error("MongoDB connection not found");
+
+  const secret = process.env.BETTER_AUTH_SECRET;
+  const baseURL = process.env.BETTER_AUTH_URL;
+
+  if (!secret || !baseURL) {
+    throw new Error("BETTER_AUTH_SECRET and BETTER_AUTH_URL must be set");
+  }
+
+  authInstance = createAuth(db as MongoDb, secret, baseURL);
+
   return authInstance;
 };
-
-export const auth = await getAuth();

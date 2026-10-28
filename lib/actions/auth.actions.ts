@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/lib/better-auth/auth";
+import { getAuth } from "@/lib/better-auth/auth";
 import { inngest } from "@/lib/inngest/client";
 import { headers } from "next/headers";
 import { connectToDatabase } from "@/database/mongoose";
@@ -42,6 +42,7 @@ export const signUpWithEmail = async ({
       };
     }
 
+    const auth = await getAuth();
     const response = await auth.api.signUpEmail({
       body: { email, password, name: fullName },
     });
@@ -91,6 +92,7 @@ export const signInWithEmail = async ({ email, password }: SignInFormData) => {
       return { success: false, error: "Email and password are required" };
     }
 
+    const auth = await getAuth();
     const response = await auth.api.signInEmail({ body: { email, password } });
 
     if (response) {
@@ -124,6 +126,7 @@ export const signInWithEmail = async ({ email, password }: SignInFormData) => {
 
 export const signOut = async () => {
   try {
+    const auth = await getAuth();
     await auth.api.signOut({ headers: await headers() });
     return { success: true };
   } catch (e) {
@@ -151,6 +154,7 @@ export const requestPasswordReset = async ({
 
     // Use better-auth's requestPasswordReset API
     // We construct our own URL in sendResetPassword, so we don't need redirectTo
+    const auth = await getAuth();
     const response = await auth.api.requestPasswordReset({
       body: { email },
     });
@@ -189,6 +193,7 @@ export const resetPasswordWithToken = async ({
     }
 
     // Use better-auth's resetPassword API
+    const auth = await getAuth();
     const response = await auth.api.resetPassword({
       body: { token, newPassword: password },
     });
@@ -263,7 +268,7 @@ async function migrateGuestData(email: string, newUserId: string) {
         { $set: { userId: newUserId } },
         { session }
       );
-      watchlistModified = (wlUpdateRes as any)?.modifiedCount ?? 0;
+      watchlistModified = wlUpdateRes.modifiedCount ?? 0;
 
       // 2) ALERTS: remove conflicting active guest alerts, migrate remaining (including inactive)
       const existingActiveAlerts = await Alert.find(
@@ -291,7 +296,7 @@ async function migrateGuestData(email: string, newUserId: string) {
 
       const conflictingGuestIds = (
         guestActiveAlerts as unknown as Array<{
-          _id: any;
+          _id: unknown;
           symbol: string;
           alertType: string;
           threshold: number;
@@ -314,7 +319,7 @@ async function migrateGuestData(email: string, newUserId: string) {
         { $set: { userId: newUserId } },
         { session }
       );
-      alertsModified = (alUpdateRes as any)?.modifiedCount ?? 0;
+      alertsModified = alUpdateRes.modifiedCount ?? 0;
     });
 
     await session.endSession();
