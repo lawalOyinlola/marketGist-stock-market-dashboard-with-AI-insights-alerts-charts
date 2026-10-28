@@ -32,8 +32,8 @@ try {
     "BETTER_AUTH_URL",
     "FINNHUB_API_KEY",
     "GEMINI_API_KEY",
-    "NODEMAILER_EMAIL",
-    "NODEMAILER_PASSWORD",
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
   ];
 
   console.log("📋 Checking Required Environment Variables:\n");
@@ -75,19 +75,22 @@ try {
     console.log("  ✅ BETTER_AUTH_SECRET length is sufficient");
   }
 
-  // Check NODEMAILER_PASSWORD format (Gmail App Password is 16 chars)
-  if (envVars.NODEMAILER_PASSWORD) {
-    const passwordLength = envVars.NODEMAILER_PASSWORD.replace(
-      /\s/g,
-      "",
-    ).length;
-    if (passwordLength === 16) {
-      console.log(
-        "  ✅ NODEMAILER_PASSWORD appears to be a Gmail App Password",
-      );
+  // Check RESEND_API_KEY format (Resend keys start with "re_")
+  if (envVars.RESEND_API_KEY) {
+    if (envVars.RESEND_API_KEY.startsWith("re_")) {
+      console.log("  ✅ RESEND_API_KEY looks like a Resend API key");
+    } else {
+      console.log('  ⚠️  RESEND_API_KEY should start with "re_"');
+    }
+  }
+
+  // Check EMAIL_FROM is a bare address; the app adds the display name
+  if (envVars.EMAIL_FROM) {
+    if (/^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$/.test(envVars.EMAIL_FROM)) {
+      console.log("  ✅ EMAIL_FROM is a bare email address");
     } else {
       console.log(
-        "  ⚠️  NODEMAILER_PASSWORD should be 16 characters (Gmail App Password)",
+        "  ⚠️  EMAIL_FROM should be a bare address such as alerts@your-domain.com, without a display name",
       );
     }
   }
