@@ -1,5 +1,6 @@
 "use server";
 
+import type { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/database/mongoose";
 import { Alert } from "@/database/models/alert.model";
 import { Notification } from "@/database/models/notification.model";
@@ -38,7 +39,7 @@ export async function checkAlertsAndTrigger(): Promise<{
     console.log(`Checking ${alerts.length} active alerts...`);
 
     // Group alerts by symbol to minimize API calls
-    const symbolsMap = new Map<string, any[]>();
+    const symbolsMap = new Map<string, (typeof alerts)[number][]>();
     for (const alert of alerts) {
       const symbol = alert.symbol;
       if (!symbolsMap.has(symbol)) {
@@ -86,7 +87,7 @@ export async function checkAlertsAndTrigger(): Promise<{
                   const lastTriggered = alert.lastTriggeredAt
                     ? new Date(alert.lastTriggeredAt)
                     : null;
-                  let updateResult: any;
+                  let updateResult: { modifiedCount: number };
 
                   if (alert.frequency === "once") {
                     // Atomically check isActive and deactivate
@@ -172,9 +173,7 @@ export async function checkAlertsAndTrigger(): Promise<{
                     // Check if it's a guest user (userId is email)
                     // Try to look up by _id first
                     try {
-                      const maybeObjectId = new (
-                        mongoose as any
-                      ).Types.ObjectId(alert.userId);
+                      const maybeObjectId = new mongoose.Types.ObjectId(alert.userId);
                       user = await db.collection("user").findOne<{
                         _id?: unknown;
                         id?: string;
@@ -196,7 +195,7 @@ export async function checkAlertsAndTrigger(): Promise<{
                         id?: string;
                         email?: string;
                       }>({
-                        _id: alert.userId as any,
+                        _id: alert.userId as unknown as ObjectId,
                       });
 
                       if (user) {
@@ -258,7 +257,7 @@ export async function checkAlertsAndTrigger(): Promise<{
                   }
 
                   triggered.push({
-                    alertId: (alert._id as any).toString(),
+                    alertId: String(alert._id),
                     userId: alert.userId,
                     symbol,
                     company,
