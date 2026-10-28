@@ -2,12 +2,13 @@
 const isDevelopment = process.env.NODE_ENV === "development";
 
 // Strip line breaks and other control characters so user input cannot
-// forge log lines. The CR/LF pass is separate because CodeQL recognises it
-// as a log-injection sanitizer.
+// forge log lines. The first pass already covers CR and LF. The last pass
+// repeats them in the form CodeQL recognises as a log-injection sanitizer
+// (it only accepts newlines replaced with ""), and it must stay last.
 export const sanitizeLog = (value: unknown): string =>
   String(value)
-    .replace(/[\r\n]/g, " ")
-    .replace(/[\p{Cc}\u2028\u2029]/gu, " ");
+    .replace(/[\p{Cc}\u2028\u2029]/gu, " ")
+    .replace(/\n|\r/g, "");
 
 // Log "j***@example.com" instead of a full address
 export const maskEmail = (email: unknown): string =>
