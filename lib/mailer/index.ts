@@ -73,7 +73,7 @@ export const sendWelcomeEmail = async ({
 }: WelcomeEmailData) => {
   // Check if user is unsubscribed
   if (await isUserUnsubscribed(email)) {
-    console.log(`Skipping welcome email to unsubscribed user: ${email}`);
+    console.log("Skipping welcome email to unsubscribed user");
     return;
   }
 
@@ -99,7 +99,7 @@ export const sendNewsSummaryEmail = async ({
 }): Promise<void> => {
   // Check if user is unsubscribed
   if (await isUserUnsubscribed(email)) {
-    console.log(`Skipping news summary email to unsubscribed user: ${email}`);
+    console.log("Skipping news summary email to unsubscribed user");
     return;
   }
 
@@ -185,7 +185,7 @@ export const sendInactiveUserReminderEmail = async ({
 }): Promise<void> => {
   // A reminder is marketing email, so it honours unsubscribe like the brief
   if (await isUserUnsubscribed(email)) {
-    console.log(`Skipping inactive reminder to unsubscribed user: ${email}`);
+    console.log("Skipping inactive reminder to unsubscribed user");
     return;
   }
 
