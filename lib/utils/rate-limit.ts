@@ -5,6 +5,24 @@ import { connectToDatabase } from "@/database/mongoose";
 import { RateLimit } from "@/database/models/rateLimit.model";
 import { AuditLog, type AuditEvent } from "@/database/models/auditLog.model";
 
+// autoIndex is off app-wide, so create these two collections' indexes once
+// per server instance. createIndexes only adds missing indexes and never
+// drops any, so it is safe to run against production on every cold start.
+let indexesReady: Promise<void> | null = null;
+function ensureIndexes(): Promise<void> {
+  indexesReady ??= Promise.all([
+    RateLimit.createIndexes(),
+    AuditLog.createIndexes(),
+  ]).then(
+    () => undefined,
+    (error) => {
+      indexesReady = null; // try again on the next request
+      console.error("Failed to create rate limit or audit indexes:", error);
+    }
+  );
+  return indexesReady;
+}
+
 // Vercel overwrites x-forwarded-for with the real client IP, so the first
 // entry can be trusted there. Behind another proxy, check it does the same.
 export async function getClientIp(): Promise<string> {
@@ -34,6 +52,7 @@ export async function checkRateLimit(
 
   try {
     await connectToDatabase();
+    await ensureIndexes();
     const doc = await RateLimit.findOneAndUpdate(
       { key: `${hashedKey}:${bucket}` },
       { $inc: { count: 1 }, $setOnInsert: { expiresAt: new Date(resetAt) } },
@@ -95,6 +114,7 @@ export async function recordAuditEvent(entry: {
 }): Promise<void> {
   try {
     await connectToDatabase();
+    await ensureIndexes();
     await AuditLog.create({ ...entry, ip: await getClientIp() });
   } catch (error) {
     console.error("Failed to write audit event:", error);
