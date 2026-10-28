@@ -62,10 +62,10 @@ async function initDatabase() {
       // Sync indexes for all models
       await mongoose.syncIndexes();
       console.log("✅ Indexes synchronized successfully\n");
-    } catch (syncError: any) {
+    } catch (syncError: unknown) {
       console.warn(
         "⚠️  Warning during index sync:",
-        syncError?.message || syncError
+        syncError instanceof Error ? syncError.message : syncError
       );
       console.log("   This is normal if indexes already exist.\n");
     }

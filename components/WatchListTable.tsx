@@ -188,7 +188,7 @@ const WatchlistTableEmpty = () => {
         </EmptyMedia>
         <EmptyTitle>No Watchlist Yet</EmptyTitle>
         <EmptyDescription>
-          Your watchlist is empty. Use the "add stock" button to add stocks to
+          Your watchlist is empty. Use the &quot;add stock&quot; button to add stocks to
           your watchlist.
         </EmptyDescription>
       </EmptyHeader>

@@ -5,8 +5,11 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 const Layout = async ({ children }: { children: React.ReactNode }) => {
+  // Read headers first so Next.js marks the route as dynamic before any
+  // database work, which lets `next build` run without env vars.
+  const requestHeaders = await headers();
   const auth = await getAuth();
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await auth.api.getSession({ headers: requestHeaders });
 
   if (session?.user) redirect("/");
 

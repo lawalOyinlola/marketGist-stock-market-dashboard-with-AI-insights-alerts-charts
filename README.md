@@ -134,7 +134,8 @@ stocks/
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 24+
+- pnpm 10 (version pinned in `packageManager` in `package.json`)
 - MongoDB database
 - Cloudflare account (for Inngest)
 - Gmail account (for Nodemailer)
@@ -162,9 +163,11 @@ NODEMAILER_EMAIL=your-email@gmail.com
 NODEMAILER_PASSWORD=your-app-password
 
 # Inngest
+# Local dev: INNGEST_DEV=1 with the Inngest Dev Server running.
+# Production: the event and signing keys, with INNGEST_DEV unset.
+INNGEST_DEV=1
 INNGEST_EVENT_KEY=your-inngest-key
 INNGEST_SIGNING_KEY=your-signing-key
-INNGEST_BASE_URL=http://localhost:3000/api/inngest
 
 # Next.js
 NEXTAUTH_URL=http://localhost:3000
@@ -197,13 +200,21 @@ pnpm run init:db
 pnpm run test:db
 ```
 
-5. **Run development server**
+5. **Start the Inngest Dev Server** (in a separate terminal)
+
+```bash
+npx inngest-cli@latest dev
+```
+
+   Keep `INNGEST_DEV=1` in `.env.local` so the app talks to the Dev Server.
+
+6. **Run development server**
 
 ```bash
 pnpm dev
 ```
 
-6. **Access the application**
+7. **Access the application**
    - Open [http://localhost:3000](http://localhost:3000)
    - Sign up for an account
    - Start tracking stocks!
@@ -256,6 +267,7 @@ Complete the password reset flow using the secure token sent to your email.
 - `pnpm build` - Build for production
 - `pnpm start` - Start production server
 - `pnpm lint` - Run ESLint
+- `pnpm typecheck` - Generate route types and run the TypeScript compiler
 - `pnpm test:db` - Test database connection
 - `pnpm init:db` - Initialize database collections
 

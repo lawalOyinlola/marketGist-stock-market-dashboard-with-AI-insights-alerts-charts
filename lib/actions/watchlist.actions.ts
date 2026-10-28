@@ -84,8 +84,8 @@ export async function addToWatchlist(
         company: company?.trim?.() || company,
         addedAt: new Date(),
       });
-    } catch (e: any) {
-      if (e?.code === 11000) {
+    } catch (e: unknown) {
+      if ((e as { code?: unknown })?.code === 11000) {
         return { success: false, error: "Stock already in watchlist" };
       }
       throw e;
