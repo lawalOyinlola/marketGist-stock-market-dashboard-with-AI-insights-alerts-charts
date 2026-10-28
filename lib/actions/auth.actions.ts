@@ -1,44 +1,75 @@
 "use server";
 
+import { z } from "zod";
 import { getAuth } from "@/lib/better-auth/auth";
 import { inngest } from "@/lib/inngest/client";
 import { headers } from "next/headers";
 import { connectToDatabase } from "@/database/mongoose";
 import { Watchlist } from "@/database/models/watchlist.model";
 import { Alert } from "@/database/models/alert.model";
+import {
+  INVESTMENT_GOALS,
+  PREFERRED_INDUSTRIES,
+  RISK_TOLERANCE_OPTIONS,
+} from "@/lib/constants";
+import {
+  checkIpRateLimit,
+  checkRateLimit,
+  recordAuditEvent,
+  tooManyAttemptsMessage,
+} from "@/lib/utils/rate-limit";
 
-export const signUpWithEmail = async ({
-  email,
-  password,
-  fullName,
-  country,
-  investmentGoals,
-  riskTolerance,
-  preferredIndustry,
-}: SignUpFormData) => {
+const optionValues = (options: { value: string }[]) =>
+  options.map((o) => o.value) as [string, ...string[]];
+
+const emailSchema = z.email().max(254);
+const passwordSchema = z.string().min(8).max(128);
+
+// Profile fields go into the welcome email's AI prompt, so only the values
+// the sign-up form offers are accepted
+const signUpSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+  fullName: z.string().trim().min(1).max(100),
+  country: z.string().regex(/^[A-Z]{2}$/),
+  investmentGoals: z.enum(optionValues(INVESTMENT_GOALS)),
+  riskTolerance: z.enum(optionValues(RISK_TOLERANCE_OPTIONS)),
+  preferredIndustry: z.enum(optionValues(PREFERRED_INDUSTRIES)),
+});
+
+const FIFTEEN_MINUTES = 15 * 60;
+const ONE_HOUR = 60 * 60;
+
+export const signUpWithEmail = async (data: SignUpFormData) => {
   try {
-    // Validate required fields
-    if (!email || !password || !fullName) {
+    const parsed = signUpSchema.safeParse(data);
+    if (!parsed.success) {
+      const field = parsed.error.issues[0]?.path[0];
       return {
         success: false,
-        error: "Email, password, and full name are required",
+        error:
+          field === "email"
+            ? "Invalid email format"
+            : field === "password"
+            ? "Password must be between 8 and 128 characters"
+            : "Please check your details and try again",
       };
     }
+    const {
+      email,
+      password,
+      fullName,
+      country,
+      investmentGoals,
+      riskTolerance,
+      preferredIndustry,
+    } = parsed.data;
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    const limit = await checkIpRateLimit("sign-up", 5, ONE_HOUR);
+    if (!limit.allowed) {
       return {
         success: false,
-        error: "Invalid email format",
-      };
-    }
-
-    // Validate password strength (example: minimum 8 characters)
-    if (password.length < 8) {
-      return {
-        success: false,
-        error: "Password must be at least 8 characters",
+        error: tooManyAttemptsMessage(limit.retryAfterSeconds),
       };
     }
 
@@ -48,6 +79,13 @@ export const signUpWithEmail = async ({
     });
 
     if (response) {
+      await recordAuditEvent({
+        event: "sign_up",
+        success: true,
+        userId: response.user?.id,
+        email,
+      });
+
       try {
         // Migrate guest data to new user account
         const newUserId = response?.user?.id ?? "";
@@ -72,7 +110,8 @@ export const signUpWithEmail = async ({
       }
     }
 
-    return { success: true, data: response };
+    // The session is in the cookie; do not send the token back in the body
+    return { success: true };
   } catch (e) {
     console.error("Sign up failed:", e);
     const errorMessage = e instanceof Error ? e.message : "Sign up failed";
@@ -87,15 +126,43 @@ export const signUpWithEmail = async ({
 };
 
 export const signInWithEmail = async ({ email, password }: SignInFormData) => {
-  try {
-    if (!email || !password) {
-      return { success: false, error: "Email and password are required" };
-    }
+  if (
+    !emailSchema.safeParse(email).success ||
+    typeof password !== "string" ||
+    !password
+  ) {
+    return { success: false, error: "Invalid email or password" };
+  }
 
+  // Per IP stops one attacker spraying many accounts. Per account stops many
+  // IPs guessing one password. It slows guessing down, it does not lock out.
+  const ipLimit = await checkIpRateLimit("sign-in", 20, FIFTEEN_MINUTES);
+  const accountLimit = await checkRateLimit(
+    `sign-in:email:${email.toLowerCase()}`,
+    10,
+    FIFTEEN_MINUTES
+  );
+  if (!ipLimit.allowed || !accountLimit.allowed) {
+    return {
+      success: false,
+      error: tooManyAttemptsMessage(
+        Math.max(ipLimit.retryAfterSeconds, accountLimit.retryAfterSeconds)
+      ),
+    };
+  }
+
+  try {
     const auth = await getAuth();
     const response = await auth.api.signInEmail({ body: { email, password } });
 
     if (response) {
+      await recordAuditEvent({
+        event: "sign_in",
+        success: true,
+        userId: response.user?.id,
+        email,
+      });
+
       try {
         // Migrate guest data to authenticated user account
         const newUserId = response?.user?.id ?? "";
@@ -108,9 +175,11 @@ export const signInWithEmail = async ({ email, password }: SignInFormData) => {
       }
     }
 
-    return { success: true, data: response };
+    // The session is in the cookie; do not send the token back in the body
+    return { success: true };
   } catch (e) {
     console.error("Sign in failed", e);
+    await recordAuditEvent({ event: "sign_in", success: false, email });
     const errorMessage = e instanceof Error ? e.message : "Sign in failed";
 
     return {
@@ -138,39 +207,54 @@ export const signOut = async () => {
 export const requestPasswordReset = async ({
   email,
 }: ForgotPasswordFormData) => {
-  try {
-    if (!email) {
-      return { success: false, error: "Email is required" };
-    }
+  if (!emailSchema.safeParse(email).success) {
+    return { success: false, error: "Invalid email format" };
+  }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return {
-        success: false,
-        error: "Invalid email format",
-      };
-    }
-
-    // Use better-auth's requestPasswordReset API
-    // We construct our own URL in sendResetPassword, so we don't need redirectTo
-    const auth = await getAuth();
-    const response = await auth.api.requestPasswordReset({
-      body: { email },
-    });
-
-    return { success: true, data: response };
-  } catch (e) {
-    console.error("Password reset request failed", e);
-    const errorMessage =
-      e instanceof Error ? e.message : "Password reset request failed";
-
+  const ipLimit = await checkIpRateLimit(
+    "password-reset-request",
+    5,
+    FIFTEEN_MINUTES
+  );
+  const accountLimit = await checkRateLimit(
+    `password-reset-request:email:${email.toLowerCase()}`,
+    3,
+    ONE_HOUR
+  );
+  if (!ipLimit.allowed || !accountLimit.allowed) {
     return {
       success: false,
-      error:
-        errorMessage.includes("not found") || errorMessage.includes("invalid")
-          ? "No account found with this email address"
-          : "Failed to send password reset email. Please try again.",
+      error: tooManyAttemptsMessage(
+        Math.max(ipLimit.retryAfterSeconds, accountLimit.retryAfterSeconds)
+      ),
+    };
+  }
+
+  try {
+    // Better Auth answers the same way whether or not the account exists.
+    // We construct our own URL in sendResetPassword, so we don't need redirectTo
+    const auth = await getAuth();
+    await auth.api.requestPasswordReset({ body: { email } });
+    await recordAuditEvent({
+      event: "password_reset_request",
+      success: true,
+      email,
+    });
+
+    return { success: true };
+  } catch (e) {
+    console.error("Password reset request failed", e);
+    await recordAuditEvent({
+      event: "password_reset_request",
+      success: false,
+      email,
+    });
+
+    // Same message whatever went wrong, so the response never reveals
+    // whether an account exists
+    return {
+      success: false,
+      error: "Failed to send password reset email. Please try again.",
     };
   }
 };
@@ -179,28 +263,37 @@ export const resetPasswordWithToken = async ({
   token,
   password,
 }: ResetPasswordWithTokenData) => {
+  if (typeof token !== "string" || !token || token.length > 512) {
+    return { success: false, error: "Token and password are required" };
+  }
+  if (!passwordSchema.safeParse(password).success) {
+    return {
+      success: false,
+      error: "Password must be between 8 and 128 characters",
+    };
+  }
+
+  const limit = await checkIpRateLimit("password-reset", 10, FIFTEEN_MINUTES);
+  if (!limit.allowed) {
+    return {
+      success: false,
+      error: tooManyAttemptsMessage(limit.retryAfterSeconds),
+    };
+  }
+
   try {
-    if (!token || !password) {
-      return { success: false, error: "Token and password are required" };
-    }
-
-    // Validate password strength
-    if (password.length < 8) {
-      return {
-        success: false,
-        error: "Password must be at least 8 characters",
-      };
-    }
-
-    // Use better-auth's resetPassword API
+    // Better Auth ends every session of the user on success
+    // (revokeSessionsOnPasswordReset in lib/better-auth/auth.ts)
     const auth = await getAuth();
-    const response = await auth.api.resetPassword({
+    await auth.api.resetPassword({
       body: { token, newPassword: password },
     });
+    await recordAuditEvent({ event: "password_reset", success: true });
 
-    return { success: true, data: response };
+    return { success: true };
   } catch (e) {
     console.error("Password reset failed", e);
+    await recordAuditEvent({ event: "password_reset", success: false });
     const errorMessage =
       e instanceof Error ? e.message : "Password reset failed";
 
@@ -235,7 +328,7 @@ async function migrateGuestData(email: string, newUserId: string) {
     const alertsCount = await Alert.countDocuments({ userId: email });
 
     if (watchlistCount === 0 && alertsCount === 0) {
-      console.log(`No guest data found for ${email}, skipping migration`);
+      console.log("No guest data found, skipping migration");
       return;
     }
 
@@ -325,7 +418,7 @@ async function migrateGuestData(email: string, newUserId: string) {
     await session.endSession();
 
     console.log(
-      `Migrated ${watchlistModified} watchlist items and ${alertsModified} alerts for ${email}`
+      `Migrated ${watchlistModified} watchlist items and ${alertsModified} alerts`
     );
   } catch (error) {
     console.error("Error migrating guest data:", error);
