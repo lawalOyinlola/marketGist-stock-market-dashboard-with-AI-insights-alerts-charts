@@ -1,33 +1,67 @@
 import sanitizeHtml from "sanitize-html";
 
 // Email HTML is built from tables with inline styles. Gmail strips <style>
-// in some views, Outlook desktop renders with Word, and both ignore most
-// modern CSS, so every component below works without the <style> block.
-// The <style> block only adds mobile padding and a few client resets.
+// in some views and Outlook desktop renders with Word, so every component
+// below looks right with inline styles alone, in the light palette.
+//
+// Dark mode: Apple Mail, iOS Mail and Outlook for Mac apply the
+// prefers-color-scheme block in layout(), which swaps each class to the dark
+// palette. Gmail ignores that block and darkens a light email by itself, so
+// a light base is the one that works everywhere.
 
-const COLORS = {
-  page: "#0a0b0d",
-  card: "#131519",
-  raised: "#1b1e24",
-  border: "#262a31",
-  heading: "#f4f5f7",
-  body: "#c9cfd6",
-  muted: "#8b939e",
-  accent: "#baf33c",
-  onAccent: "#0a0b0d",
-  up: "#22c55e",
-  down: "#f87171",
-  volume: "#fdd458",
+const LIGHT = {
+  bg: "#ffffff",
+  heading: "#111111",
+  body: "#2f3437",
+  muted: "#787774",
+  border: "#eaeaea",
+  button: "#111111",
+  onButton: "#ffffff",
 } as const;
 
-const FONT =
-  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+const DARK = {
+  bg: "#121212",
+  heading: "#f2f2f2",
+  body: "#cfcfcf",
+  muted: "#8e8e93",
+  border: "#2c2c2e",
+  button: "#f2f2f2",
+  onButton: "#111111",
+} as const;
 
-// The logo has white lettering, so it needs the dark header behind it.
-const LOGO_URL =
-  "https://res.cloudinary.com/dnw48gzss/image/upload/v1761215474/logo-marketgist_xc1psm.png";
-const DASHBOARD_PREVIEW_URL =
-  "https://ik.imagekit.io/a6fkjou7d/dashboard-preview.png?updatedAt=1756378548102";
+// Muted tones for meaning only: price up, price down, volume, and the brief.
+const TONES = {
+  up: {
+    text: "#346538",
+    bg: "#edf3ec",
+    darkText: "#86c793",
+    darkBg: "#1c2a1e",
+  },
+  down: {
+    text: "#9f2f2d",
+    bg: "#fdebec",
+    darkText: "#f19a96",
+    darkBg: "#3a1f1e",
+  },
+  volume: {
+    text: "#956400",
+    bg: "#fbf3db",
+    darkText: "#e6c15c",
+    darkBg: "#332911",
+  },
+  info: {
+    text: "#1f6c9f",
+    bg: "#e1f3fe",
+    darkText: "#86c4ee",
+    darkBg: "#142836",
+  },
+} as const;
+
+type Tone = keyof typeof TONES;
+
+const SANS =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif";
+const SERIF = "ui-serif, 'New York', 'Iowan Old Style', Georgia, serif";
 
 export type EmailContent = {
   subject: string;
@@ -106,55 +140,57 @@ const firstName = (name: string) => oneLine(name).split(/\s+/)[0] || "there";
 
 // --- Building blocks --------------------------------------------------------
 
+// Class names exist only for the dark-mode overrides in layout().
 const heading = (html: string) =>
-  `<h1 style="margin: 0 0 16px 0; font-family: ${FONT}; font-size: 26px; line-height: 1.25; font-weight: 700; color: ${COLORS.heading};">${html}</h1>`;
+  `<h1 class="c-h" style="margin: 0 0 20px 0; font-family: ${SERIF}; font-size: 30px; line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; color: ${LIGHT.heading};">${html}</h1>`;
 
 const paragraph = (html: string, { muted = false, size = 16 } = {}) =>
-  `<p style="margin: 0 0 16px 0; font-family: ${FONT}; font-size: ${size}px; line-height: 1.6; color: ${muted ? COLORS.muted : COLORS.body};">${html}</p>`;
+  `<p class="${muted ? "c-m" : "c-b"}" style="margin: 0 0 20px 0; font-family: ${SANS}; font-size: ${size}px; line-height: 1.65; color: ${muted ? LIGHT.muted : LIGHT.body};">${html}</p>`;
 
-const badge = (label: string, color: string) =>
-  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 20px 0;"><tr><td style="padding: 6px 12px; border: 1px solid ${color}; border-radius: 999px; font-family: ${FONT}; font-size: 12px; line-height: 1; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: ${color};">${label}</td></tr></table>`;
+// Small uppercase label that opens a section, as in the news brief.
+const label = (text: string) =>
+  `<p class="c-m" style="margin: 40px 0 16px 0; font-family: ${SANS}; font-size: 12px; line-height: 1.4; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: ${LIGHT.muted};">${text}</p>`;
+
+const badge = (text: string, tone: Tone) =>
+  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 0 24px 0;"><tr><td class="t-${tone}" bgcolor="${TONES[tone].bg}" style="padding: 5px 10px; border-radius: 999px; background-color: ${TONES[tone].bg}; font-family: ${SANS}; font-size: 11px; line-height: 1; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: ${TONES[tone].text};">${text}</td></tr></table>`;
 
 // A table cell with bgcolor keeps the button filled in Outlook desktop, which
 // ignores background colors on links.
-const button = (href: string, label: string) =>
-  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 8px 0 24px 0;"><tr><td bgcolor="${COLORS.accent}" style="border-radius: 8px; background-color: ${COLORS.accent};"><a href="${href}" target="_blank" style="display: inline-block; padding: 14px 28px; font-family: ${FONT}; font-size: 16px; line-height: 1; font-weight: 700; color: ${COLORS.onAccent}; text-decoration: none; border-radius: 8px;">${label}</a></td></tr></table>`;
+const button = (href: string, text: string) =>
+  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 32px 0;"><tr><td class="btn" bgcolor="${LIGHT.button}" style="border-radius: 6px; background-color: ${LIGHT.button};"><a class="btn-t" href="${href}" target="_blank" style="display: inline-block; padding: 14px 24px; font-family: ${SANS}; font-size: 15px; line-height: 1; font-weight: 600; color: ${LIGHT.onButton}; text-decoration: none; border-radius: 6px;">${text}</a></td></tr></table>`;
 
-const textLink = (href: string, label: string, color: string = COLORS.accent) =>
-  `<a href="${href}" target="_blank" style="color: ${color}; text-decoration: underline;">${label}</a>`;
+const textLink = (href: string, text: string, muted = false) =>
+  `<a class="${muted ? "c-m" : "c-h"}" href="${href}" target="_blank" style="color: ${muted ? LIGHT.muted : LIGHT.heading}; text-decoration: underline;">${text}</a>`;
 
-// The large number at the top of an alert: label, value, and a line of context.
-// It joins the facts() table below it into one card.
-const headline = (label: string, value: string, color: string, note = "") =>
-  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 8px 0 0 0;"><tr><td bgcolor="${COLORS.raised}" style="padding: 24px; background-color: ${COLORS.raised}; border: 1px solid ${COLORS.border}; border-bottom: 0; border-radius: 12px 12px 0 0;">
-<p style="margin: 0 0 6px 0; font-family: ${FONT}; font-size: 13px; line-height: 1.4; color: ${COLORS.muted};">${label}</p>
-<p style="margin: 0; font-family: ${FONT}; font-size: 36px; line-height: 1.1; font-weight: 700; color: ${color};">${value}</p>
-${note ? `<p style="margin: 8px 0 0 0; font-family: ${FONT}; font-size: 14px; line-height: 1.4; color: ${COLORS.body};">${note}</p>` : ""}
-</td></tr></table>`;
+// The number that matters in an alert, with a line of context under it.
+const stat = (caption: string, value: string, tone: Tone, note = "") =>
+  `<p class="c-m" style="margin: 32px 0 8px 0; font-family: ${SANS}; font-size: 13px; line-height: 1.4; color: ${LIGHT.muted};">${caption}</p>
+<p class="c-${tone}" style="margin: 0; font-family: ${SANS}; font-size: 44px; line-height: 1.1; font-weight: 600; letter-spacing: -0.02em; color: ${TONES[tone].text};">${value}</p>
+${note ? `<p class="c-m" style="margin: 8px 0 0 0; font-family: ${SANS}; font-size: 14px; line-height: 1.5; color: ${LIGHT.muted};">${note}</p>` : ""}`;
 
-// Label and value rows. Rows stay side by side at any width, so the block
-// needs no mobile breakpoint.
-const facts = (rows: { label: string; value: string; color?: string }[]) =>
-  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 24px 0; border: 1px solid ${COLORS.border}; border-radius: 0 0 12px 12px;">${rows
-    .map((row, i) => {
-      const rule = i ? `border-top: 1px solid ${COLORS.border};` : "";
-      return `<tr><td style="padding: 14px 24px; ${rule} white-space: nowrap; font-family: ${FONT}; font-size: 14px; line-height: 1.4; color: ${COLORS.muted};">${row.label}</td><td align="right" style="padding: 14px 24px; ${rule} font-family: ${FONT}; font-size: 15px; line-height: 1.4; font-weight: 600; color: ${row.color ?? COLORS.heading};">${row.value}</td></tr>`;
+// Label and value rows divided by hairlines. Rows stay side by side at any
+// width, so the block needs no mobile breakpoint.
+const facts = (rows: { label: string; value: string; tone?: Tone }[]) =>
+  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 32px 0;">${rows
+    .map((row) => {
+      const line = `border-top: 1px solid ${LIGHT.border};`;
+      const valueColor = row.tone ? TONES[row.tone].text : LIGHT.heading;
+      return `<tr><td class="bd c-m" style="padding: 14px 16px 14px 0; ${line} white-space: nowrap; font-family: ${SANS}; font-size: 14px; line-height: 1.4; color: ${LIGHT.muted};">${row.label}</td><td class="bd ${row.tone ? `c-${row.tone}` : "c-h"}" align="right" style="padding: 14px 0; ${line} font-family: ${SANS}; font-size: 14px; line-height: 1.4; font-weight: 600; color: ${valueColor};">${row.value}</td></tr>`;
     })
-    .join("")}</table>`;
-
-const note = (html: string) =>
-  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 24px 0;"><tr><td style="padding: 2px 0 2px 16px; border-left: 3px solid ${COLORS.border}; font-family: ${FONT}; font-size: 14px; line-height: 1.6; color: ${COLORS.muted};">${html}</td></tr></table>`;
+    .join(
+      "",
+    )}<tr><td colspan="2" class="bd" style="border-top: 1px solid ${LIGHT.border}; font-size: 0; line-height: 0;">&nbsp;</td></tr></table>`;
 
 const numberedList = (items: string[]) =>
-  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 16px 0;">${items
+  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 8px 0;">${items
     .map(
       (item, i) =>
-        `<tr><td valign="top" width="28" style="padding: 0 0 14px 0; font-family: ${FONT}; font-size: 16px; line-height: 1.6; font-weight: 700; color: ${COLORS.accent};">${i + 1}.</td><td style="padding: 0 0 14px 0; font-family: ${FONT}; font-size: 16px; line-height: 1.6; color: ${COLORS.body};">${item}</td></tr>`,
+        `<tr><td class="c-m" valign="top" width="32" style="padding: 0 0 20px 0; font-family: ${SANS}; font-size: 15px; line-height: 1.65; font-weight: 600; color: ${LIGHT.muted};">${i + 1}</td><td class="c-b" style="padding: 0 0 20px 0; font-family: ${SANS}; font-size: 16px; line-height: 1.65; color: ${LIGHT.body};">${item}</td></tr>`,
     )
     .join("")}</table>`;
 
 const rule = () =>
-  `<hr style="margin: 28px 0; border: 0; border-top: 1px solid ${COLORS.border};">`;
+  `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 40px 0;"><tr><td class="bd" style="border-top: 1px solid ${LIGHT.border}; font-size: 0; line-height: 0;">&nbsp;</td></tr></table>`;
 
 type LayoutOptions = {
   title: string;
@@ -169,6 +205,14 @@ type LayoutOptions = {
   manageUrl?: string;
 };
 
+const toneCss = (Object.keys(TONES) as Tone[])
+  .map(
+    (tone) =>
+      `.c-${tone} { color: ${TONES[tone].darkText} !important; }
+    .t-${tone} { background-color: ${TONES[tone].darkBg} !important; color: ${TONES[tone].darkText} !important; }`,
+  )
+  .join("\n    ");
+
 const layout = ({
   title,
   preheader,
@@ -180,15 +224,16 @@ const layout = ({
 }: LayoutOptions) => {
   const footerLinks = [
     unsubscribeUrl
-      ? textLink(escapeHtml(unsubscribeUrl), "Unsubscribe", COLORS.muted)
+      ? textLink(escapeHtml(unsubscribeUrl), "Unsubscribe", true)
       : "",
-    manageUrl
-      ? textLink(escapeHtml(manageUrl), "Manage alerts", COLORS.muted)
-      : "",
-    textLink(appUrl, "Open Marketgist", COLORS.muted),
+    manageUrl ? textLink(escapeHtml(manageUrl), "Manage alerts", true) : "",
+    textLink(appUrl, "Open Marketgist", true),
   ]
     .filter(Boolean)
     .join(" &nbsp;&middot;&nbsp; ");
+
+  const footerText = (html: string, last = false) =>
+    `<p class="c-m" style="margin: 0 0 ${last ? 0 : 8}px 0; font-family: ${SANS}; font-size: 13px; line-height: 1.6; color: ${LIGHT.muted};">${html}</p>`;
 
   // The zero-width characters after the preheader stop inbox previews from
   // pulling in the first lines of the body after it.
@@ -199,34 +244,43 @@ const layout = ({
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="x-apple-disable-message-reformatting">
 <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
-<meta name="color-scheme" content="dark">
-<meta name="supported-color-schemes" content="dark">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
 <title>${title}</title>
 <style>
-  :root { color-scheme: dark; supported-color-schemes: dark; }
+  :root { color-scheme: light dark; supported-color-schemes: light dark; }
   body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; }
   a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; }
   @media only screen and (max-width: 600px) {
-    .outer { padding: 16px 8px !important; }
-    .inner { padding: 28px 20px !important; }
+    .outer { padding: 32px 20px 40px 20px !important; }
+  }
+  @media (prefers-color-scheme: dark) {
+    .bg { background-color: ${DARK.bg} !important; }
+    .c-h { color: ${DARK.heading} !important; }
+    .c-b { color: ${DARK.body} !important; }
+    .c-m { color: ${DARK.muted} !important; }
+    .bd { border-color: ${DARK.border} !important; }
+    .btn { background-color: ${DARK.button} !important; }
+    .btn-t { color: ${DARK.onButton} !important; }
+    ${toneCss}
   }
 </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: ${COLORS.page};">
-<div style="display: none; max-height: 0; overflow: hidden; mso-hide: all; font-size: 1px; line-height: 1px; color: ${COLORS.page};">${preheader}${"&#847;&zwnj;&nbsp;".repeat(40)}</div>
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" bgcolor="${COLORS.page}" style="background-color: ${COLORS.page};">
-<tr><td align="center" class="outer" style="padding: 32px 16px;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width: 600px;">
-<tr><td style="padding: 8px 8px 24px 8px;">
-<a href="${appUrl}" target="_blank"><img src="${LOGO_URL}" alt="Marketgist" width="144" style="display: block; width: 144px; max-width: 100%; height: auto; border: 0;"></a>
+<body class="bg" style="margin: 0; padding: 0; background-color: ${LIGHT.bg};">
+<div style="display: none; max-height: 0; overflow: hidden; mso-hide: all; font-size: 1px; line-height: 1px;">${preheader}${"&#847;&zwnj;&nbsp;".repeat(40)}</div>
+<table role="presentation" class="bg" cellspacing="0" cellpadding="0" border="0" width="100%" bgcolor="${LIGHT.bg}" style="background-color: ${LIGHT.bg};">
+<tr><td align="center" class="outer" style="padding: 56px 24px 56px 24px;">
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width: 560px;">
+<tr><td style="padding: 0 0 48px 0;">
+<a href="${appUrl}" target="_blank" class="c-h" style="font-family: ${SANS}; font-size: 17px; line-height: 1; font-weight: 700; letter-spacing: -0.01em; color: ${LIGHT.heading}; text-decoration: none;">Market<span class="c-m" style="color: ${LIGHT.muted};">gist</span></a>
 </td></tr>
-<tr><td class="inner" bgcolor="${COLORS.card}" style="padding: 36px 40px; background-color: ${COLORS.card}; border: 1px solid ${COLORS.border}; border-radius: 16px;">
+<tr><td style="padding: 0 0 28px 0;">
 ${body}
 </td></tr>
-<tr><td style="padding: 24px 8px 0 8px;">
-<p style="margin: 0 0 12px 0; font-family: ${FONT}; font-size: 13px; line-height: 1.6; color: ${COLORS.muted};">${reason}</p>
-<p style="margin: 0 0 12px 0; font-family: ${FONT}; font-size: 13px; line-height: 1.6; color: ${COLORS.muted};">${footerLinks}</p>
-<p style="margin: 0; font-family: ${FONT}; font-size: 13px; line-height: 1.6; color: ${COLORS.muted};">&copy; ${new Date().getUTCFullYear()} Marketgist</p>
+<tr><td class="bd" style="padding: 32px 0 0 0; border-top: 1px solid ${LIGHT.border};">
+${footerText(reason)}
+${footerText(footerLinks)}
+${footerText(`&copy; ${new Date().getUTCFullYear()} Marketgist`, true)}
 </td></tr>
 </table>
 </td></tr>
@@ -281,33 +335,33 @@ export const renderRichText = (html: string) => {
   })
     .replace(
       /<h3>/g,
-      `<h3 style="margin: 32px 0 14px 0; font-family: ${FONT}; font-size: 13px; line-height: 1.4; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: ${COLORS.accent};">`,
+      `<h3 class="c-m" style="margin: 40px 0 16px 0; font-family: ${SANS}; font-size: 12px; line-height: 1.4; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: ${LIGHT.muted};">`,
     )
     .replace(
       /<h4>/g,
-      `<h4 style="margin: 0 0 10px 0; font-family: ${FONT}; font-size: 18px; line-height: 1.4; font-weight: 700; color: ${COLORS.heading};">`,
+      `<h4 class="c-h" style="margin: 0 0 12px 0; font-family: ${SERIF}; font-size: 21px; line-height: 1.3; font-weight: 600; letter-spacing: -0.01em; color: ${LIGHT.heading};">`,
     )
     .replace(
       /<p>/g,
-      `<p style="margin: 0 0 16px 0; font-family: ${FONT}; font-size: 16px; line-height: 1.6; color: ${COLORS.body};">`,
+      `<p class="c-b" style="margin: 0 0 20px 0; font-family: ${SANS}; font-size: 16px; line-height: 1.65; color: ${LIGHT.body};">`,
     )
     .replace(
       /<(ul|ol)>/g,
-      `<$1 style="margin: 0 0 16px 0; padding: 0 0 0 20px; font-family: ${FONT}; font-size: 16px; line-height: 1.6; color: ${COLORS.body};">`,
+      `<$1 class="c-b" style="margin: 0 0 20px 0; padding: 0 0 0 20px; font-family: ${SANS}; font-size: 16px; line-height: 1.65; color: ${LIGHT.body};">`,
     )
-    .replace(/<li>/g, `<li style="margin: 0 0 8px 0;">`)
+    .replace(/<li>/g, `<li style="margin: 0 0 10px 0;">`)
     .replace(
       /<(strong|b)>/g,
-      `<$1 style="font-weight: 700; color: ${COLORS.heading};">`,
+      `<$1 class="c-h" style="font-weight: 600; color: ${LIGHT.heading};">`,
     )
     .replace(
       /<blockquote>/g,
-      `<blockquote style="margin: 0 0 16px 0; padding: 12px 16px; border-left: 3px solid ${COLORS.accent}; background-color: ${COLORS.raised}; font-family: ${FONT}; font-size: 15px; line-height: 1.6; color: ${COLORS.body};">`,
+      `<blockquote class="bd c-b" style="margin: 0 0 20px 0; padding: 2px 0 2px 16px; border-left: 2px solid ${LIGHT.border}; font-family: ${SANS}; font-size: 15px; line-height: 1.65; color: ${LIGHT.body};">`,
     )
     .replace(/<hr \/>|<hr>/g, rule())
     .replace(
       /<a ([^>]*)>/g,
-      `<a $1 style="color: ${COLORS.accent}; font-weight: 600; text-decoration: underline;">`,
+      `<a $1 class="c-h" style="color: ${LIGHT.heading}; font-weight: 600; text-decoration: underline;">`,
     );
 };
 
@@ -344,10 +398,7 @@ export const welcomeEmail = ({
   const body = [
     heading(`Welcome to Marketgist, ${escapeHtml(first)}`),
     renderRichText(intro),
-    `<img src="${DASHBOARD_PREVIEW_URL}" alt="The Marketgist dashboard with a watchlist, price chart and market news" width="518" style="display: block; width: 100%; max-width: 518px; height: auto; margin: 8px 0 28px 0; border: 1px solid ${COLORS.border}; border-radius: 12px;">`,
-    paragraph(
-      `<strong style="color: ${COLORS.heading};">Three things worth doing first</strong>`,
-    ),
+    label("Three things worth doing first"),
     numberedList(steps),
     button(appUrl, "Open your dashboard"),
     paragraph(
@@ -401,7 +452,7 @@ export const newsSummaryEmail = ({
     "Summaries are written by AI from published news articles and can contain mistakes. Read the full story before you act on anything, and treat this as information, not investment advice.";
 
   const body = [
-    badge("Daily brief", COLORS.accent),
+    badge("Daily brief", "info"),
     heading("Today's market brief"),
     paragraph(escapeHtml(day), { muted: true, size: 14 }),
     renderRichText(newsContent),
@@ -454,7 +505,7 @@ export const priceAlertEmail = ({
   appUrl: string;
 }): EmailContent => {
   const isUpper = direction === "upper";
-  const color = isUpper ? COLORS.up : COLORS.down;
+  const tone: Tone = isUpper ? "up" : "down";
   const verb = isUpper ? "rose above" : "fell below";
   const ticker = oneLine(symbol).toUpperCase();
   const name = oneLine(company) || ticker;
@@ -470,14 +521,14 @@ export const priceAlertEmail = ({
     "Prices are checked once an hour, so the price now may be different.";
 
   const body = [
-    badge(isUpper ? "Price alert &uarr;" : "Price alert &darr;", color),
+    badge("Price alert", tone),
     heading(`${escapeHtml(ticker)} ${verb} ${escapeHtml(target)}`),
     paragraph(escapeHtml(summary)),
-    headline(
+    stat(
       "Price at last check",
       escapeHtml(price),
-      color,
-      diff ? `${escapeHtml(diff)} from your target` : "",
+      tone,
+      diff ? `${escapeHtml(diff)} from your ${escapeHtml(target)} target` : "",
     ),
     facts([
       {
@@ -488,8 +539,9 @@ export const priceAlertEmail = ({
       { label: "Checked at", value: escapeHtml(checkedAt) },
     ]),
     button(stockUrl, `View ${escapeHtml(ticker)}`),
-    note(
+    paragraph(
       `${caveat} You can change or turn off this alert from your ${textLink(manageUrl, "watchlist")}.`,
+      { muted: true, size: 14 },
     ),
     paragraph("This alert is information, not investment advice.", {
       muted: true,
@@ -563,15 +615,15 @@ export const volumeAlertEmail = ({
     "Heavy volume means more shares than usual are changing hands. It often follows news, an earnings report or a large fund buying or selling, but it doesn't tell you which way the price goes next. The headlines on the stock page are the quickest way to see what's behind it.";
 
   const body = [
-    badge("Volume alert", COLORS.volume),
+    badge("Volume alert", "volume"),
     heading(
       `${escapeHtml(ticker)} is trading ${escapeHtml(spike)} above normal`,
     ),
     paragraph(escapeHtml(oneLine(alertMessage))),
-    headline(
+    stat(
       "Shares traded today",
       escapeHtml(volume),
-      COLORS.volume,
+      "volume",
       `The average is ${escapeHtml(average)}`,
     ),
     facts([
@@ -582,7 +634,7 @@ export const volumeAlertEmail = ({
       {
         label: "Price",
         value: escapeHtml(priceLine),
-        color: isUp ? COLORS.up : COLORS.down,
+        tone: isUp ? "up" : "down",
       },
       { label: "Checked at", value: escapeHtml(checkedAt) },
     ]),
@@ -692,10 +744,10 @@ export const passwordResetEmail = ({
     ),
     button(href, "Choose a new password"),
     paragraph(
-      `Button not working? Copy this link into your browser:<br><a href="${href}" target="_blank" style="color: ${COLORS.accent}; word-break: break-all;">${href}</a>`,
+      `Button not working? Copy this link into your browser:<br><a class="c-h" href="${href}" target="_blank" style="color: ${LIGHT.heading}; word-break: break-all;">${href}</a>`,
       { muted: true, size: 14 },
     ),
-    note(ignore),
+    paragraph(ignore, { muted: true, size: 14 }),
   ].join("\n");
 
   return {
