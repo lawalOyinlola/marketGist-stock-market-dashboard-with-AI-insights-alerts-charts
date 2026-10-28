@@ -9,109 +9,12 @@ import {
 } from "@/lib/utils";
 import { POPULAR_STOCK_SYMBOLS } from "@/lib/constants";
 import { cache } from "react";
-import { apiRateLimiter } from "@/lib/utils/rateLimiter";
+import { fetchJSON } from "@/lib/utils/finnhub-fetch";
+import { sanitizeLog } from "@/lib/utils/logger";
 
 const FINNHUB_BASE_URL = "https://finnhub.io/api/v1";
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
 const FINNHUB_DISABLE = process.env.FINNHUB_DISABLE === "true";
-
-async function fetchJSON<T>(
-  url: string,
-  revalidateSeconds?: number,
-  retries: number = 3
-): Promise<T> {
-  const options: RequestInit & { next?: { revalidate?: number } } =
-    revalidateSeconds
-      ? { cache: "force-cache", next: { revalidate: revalidateSeconds } }
-      : { cache: "no-store" };
-
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      // Check rate limit before making request
-      if (!apiRateLimiter.isAllowed("finnhub-api")) {
-        const waitTime = apiRateLimiter.getTimeUntilReset("finnhub-api");
-        console.log(
-          `Rate limit exceeded. Waiting ${Math.ceil(
-            waitTime / 1000
-          )} seconds...`
-        );
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
-      }
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10_000); // 10s
-
-      try {
-        const res = await fetch(url, { ...options, signal: controller.signal });
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-
-          // Handle specific error cases
-          if (res.status === 403) {
-            console.error(
-              "Finnhub API 403 Error - Possible rate limit or quota exceeded"
-            );
-            if (attempt < retries) {
-              console.log(
-                `Retrying in ${
-                  attempt * 2
-                } seconds... (attempt ${attempt}/${retries})`
-              );
-              await new Promise((resolve) =>
-                setTimeout(resolve, attempt * 2000)
-              );
-              continue;
-            }
-            throw new Error(
-              "API rate limit or quota exceeded. Please try again later."
-            );
-          }
-
-          if (res.status === 429) {
-            console.error("Finnhub API 429 Error - Rate limit exceeded");
-            if (attempt < retries) {
-              console.log(
-                `Retrying in ${
-                  attempt * 2
-                } seconds... (attempt ${attempt}/${retries})`
-              );
-              await new Promise((resolve) =>
-                setTimeout(resolve, attempt * 2000)
-              );
-              continue;
-            }
-            throw new Error("API rate limit exceeded. Please try again later.");
-          }
-
-          if (res.status === 401) {
-            console.error("Finnhub API 401 Error - Invalid API key");
-            throw new Error(
-              "API authentication failed. Please check your API key."
-            );
-          }
-
-          throw new Error(`Fetch failed ${res.status}: ${text}`);
-        }
-        return (await res.json()) as T;
-      } catch (error) {
-        console.error("Error fetching JSON:", error);
-        throw error;
-      } finally {
-        clearTimeout(timeout);
-      }
-    } catch (error) {
-      if (attempt === retries) {
-        throw error;
-      }
-      console.log(`Fetch attempt ${attempt} failed, retrying...`);
-      await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
-    }
-  }
-
-  throw new Error("All retry attempts failed");
-}
-
-export { fetchJSON };
 
 // Get current quote (price) for a symbol
 export async function getQuote(symbol: string): Promise<QuoteData | null> {
@@ -132,7 +35,7 @@ export async function getQuote(symbol: string): Promise<QuoteData | null> {
     const quote = await fetchJSON<QuoteData>(url, 60);
     return quote;
   } catch (err) {
-    console.error(`Error fetching quote for ${symbol}:`, err);
+    console.error("Error fetching quote for", sanitizeLog(symbol), err);
     return null;
   }
 }
@@ -159,7 +62,9 @@ export async function getNews(
 
     // If we have symbols, try to fetch company news per symbol and round-robin select
     if (cleanSymbols.length > 0) {
-      const perSymbolArticles: Record<string, RawNewsArticle[]> = {};
+      // A Map, not an object: symbols are caller-supplied, and a key like
+      // "__proto__" must not reach object property assignment.
+      const perSymbolArticles = new Map<string, RawNewsArticle[]>();
 
       const pool = 5;
       for (let i = 0; i < cleanSymbols.length; i += pool) {
@@ -171,10 +76,17 @@ export async function getNews(
                 sym
               )}&from=${range.from}&to=${range.to}&token=${token}`;
               const articles = await fetchJSON<RawNewsArticle[]>(url, 300);
-              perSymbolArticles[sym] = (articles || []).filter(validateArticle);
+              perSymbolArticles.set(
+                sym,
+                (articles || []).filter(validateArticle)
+              );
             } catch (e) {
-              console.error("Error fetching company news for", sym, e);
-              perSymbolArticles[sym] = [];
+              console.error(
+                "Error fetching company news for",
+                sanitizeLog(sym),
+                e
+              );
+              perSymbolArticles.set(sym, []);
             }
           })
         );
@@ -185,10 +97,10 @@ export async function getNews(
       for (let round = 0; round < maxArticles; round++) {
         for (let i = 0; i < cleanSymbols.length; i++) {
           const sym = cleanSymbols[i];
-          const list = perSymbolArticles[sym] || [];
+          const list = perSymbolArticles.get(sym) || [];
           if (list.length === 0) continue;
 
-          const idx = perSymbolArticles[sym].length - list.length;
+          const idx = (perSymbolArticles.get(sym)?.length ?? 0) - list.length;
           const article = list[idx];
 
           if (!article || !validateArticle(article)) continue;
@@ -447,21 +359,14 @@ const getWatchlistWithDataCached = cache(
 export async function getWatchlistWithData(
   email?: string
 ): Promise<StockWithData[]> {
-  // If email is provided, use per-email cached version
-  if (email) {
-    return getWatchlistWithDataCached(email);
-  }
-
-  // Fallback for client-side calls without email (legacy support)
   try {
-    const { getAuth } = await import("@/lib/better-auth/auth");
-    const { headers } = await import("next/headers");
-    const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: await headers() });
+    // Signed-in callers get their own watchlist; guests only for an email
+    // that has no account
+    const { resolveDataOwner } = await import("@/lib/utils/user-access");
+    const owner = await resolveDataOwner(email);
+    if (!owner) return [];
 
-    if (!session?.user?.email) return [];
-
-    return getWatchlistWithDataCached(session.user.email);
+    return getWatchlistWithDataCached(owner.email);
   } catch (err) {
     console.error("Error in getWatchlistWithData:", err);
     return [];
