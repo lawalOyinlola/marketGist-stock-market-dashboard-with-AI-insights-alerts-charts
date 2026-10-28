@@ -95,7 +95,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    if (markAllAsRead) {
+    if (markAllAsRead === true) {
       // Mark all notifications as read for this user
       await Notification.updateMany(
         { userId, isRead: false },
@@ -104,7 +104,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    if (notificationId) {
+    if (notificationId !== undefined) {
+      // Must be a plain ObjectId string, never an object such as {"$ne": null}
+      if (
+        typeof notificationId !== "string" ||
+        !/^[a-f0-9]{24}$/i.test(notificationId)
+      ) {
+        return NextResponse.json(
+          { error: "Invalid notificationId" },
+          { status: 400 }
+        );
+      }
+
       // Mark specific notification as read
       const result = await Notification.updateOne(
         { _id: notificationId, userId },
