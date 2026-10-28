@@ -14,6 +14,8 @@ const createAuth = (db: MongoDb, secret: string, baseURL: string) =>
     baseURL,
     emailAndPassword: {
       resetPasswordTokenExpiresIn: 3600, // 1 hour in seconds
+      // A reset must evict anyone already signed in as this user
+      revokeSessionsOnPasswordReset: true,
       enabled: true,
       disableSignUp: false,
       requireEmailVerification: false,
@@ -39,6 +41,9 @@ const createAuth = (db: MongoDb, secret: string, baseURL: string) =>
         }
       },
     },
+    // Applies to requests to /api/auth/*. The default in-memory store resets
+    // with each serverless instance; the database store is shared.
+    rateLimit: { storage: "database" },
     plugins: [nextCookies()],
   });
 
