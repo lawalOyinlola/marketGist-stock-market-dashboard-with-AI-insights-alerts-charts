@@ -10,7 +10,7 @@ import {
 import { POPULAR_STOCK_SYMBOLS } from "@/lib/constants";
 import { cache } from "react";
 import { fetchJSON } from "@/lib/utils/finnhub-fetch";
-import { logger } from "@/lib/utils/logger";
+import { sanitizeLog } from "@/lib/utils/logger";
 
 const FINNHUB_BASE_URL = "https://finnhub.io/api/v1";
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
@@ -81,7 +81,11 @@ export async function getNews(
                 (articles || []).filter(validateArticle)
               );
             } catch (e) {
-              logger.error("Error fetching company news for", sym, e);
+              console.error(
+                "Error fetching company news for",
+                sanitizeLog(sym),
+                e
+              );
               perSymbolArticles.set(sym, []);
             }
           })
