@@ -1,210 +1,52 @@
-export const PERSONALIZED_WELCOME_EMAIL_PROMPT = `Generate highly personalized HTML content that will be inserted into an email template at the {{intro}} placeholder.
+export const PERSONALIZED_WELCOME_EMAIL_PROMPT = `Write the opening paragraph of a welcome email for a new Marketgist user. Marketgist is a stock market dashboard with watchlists, hourly price alerts and a daily AI news brief.
 
-User profile data:
+User profile:
 {{userProfile}}
 
-PERSONALIZATION REQUIREMENTS:
-You MUST create content that is obviously tailored to THIS specific user by:
+The email already opens with the heading "Welcome to Marketgist, <first name>", so do not start with "Welcome". Open with something like "Thanks for joining", "Good to have you here" or "You're all set".
 
-IMPORTANT: Do NOT start the personalized content with "Welcome" since the email header already says "Welcome aboard {{name}}". Use alternative openings like "Thanks for joining", "Great to have you", "You're all set", "Perfect timing", etc.
+Write two sentences, 35 to 50 words in total, addressed to the reader as "you":
+- The first sentence names their actual goal, risk tolerance or preferred industry from the profile, in plain words.
+- The second says how Marketgist helps with that, using only the features above: watchlists, price alerts and the daily brief. Do not invent features, numbers or promises.
+- Wrap the one or two profile details you mention in <strong>.
+- Write like a person, not a brochure: no exclamation marks, no em dashes, no hype words such as "supercharge" or "unlock".
+- Never tell the reader what to buy or sell.
 
-1. **Direct Reference to User Details**: Extract and use specific information from their profile:
-   - Their exact investment goals or objectives
-   - Their stated risk tolerance level
-   - Their preferred sectors/industries mentioned
-   - Their experience level or background
-   - Any specific stocks/companies they're interested in
-   - Their investment timeline (short-term, long-term, retirement)
+Output format: exactly one <p> element and nothing else. No attributes, no classes, no inline styles, no markdown, no code fences. The email applies its own styling.
 
-2. **Contextual Messaging**: Create content that shows you understand their situation:
-   - New investors → Reference learning/starting their journey
-   - Experienced traders → Reference advanced tools/strategy enhancement  
-   - Retirement planning → Reference building wealth over time
-   - Specific sectors → Reference those exact industries by name
-   - Conservative approach → Reference safety and informed decisions
-   - Aggressive approach → Reference opportunities and growth potential
+Example:
+<p>Thanks for joining Marketgist. Since you're building a <strong>long-term retirement portfolio</strong> with a <strong>conservative</strong> approach, your watchlist and daily brief will keep the steady movers in view without the day-to-day noise.</p>`;
 
-3. **Personal Touch**: Make it feel like it was written specifically for them:
-   - Use their goals in your messaging
-   - Reference their interests directly
-   - Connect features to their specific needs
-   - Make them feel understood and seen
+export const NEWS_SUMMARY_EMAIL_PROMPT = `Write the body of today's Marketgist market brief from the news articles below. Readers are everyday investors, many of them new to it, reading on a phone.
 
-CRITICAL FORMATTING REQUIREMENTS:
-- Return ONLY clean HTML content with NO markdown, NO code blocks, NO backticks
-- Use SINGLE paragraph only: <p class="mobile-text" style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">content</p>
-- Write exactly TWO sentences (add one more sentence than current single sentence)
-- Keep total content between 35-50 words for readability
-- Use <strong> for key personalized elements (their goals, sectors, etc.)
-- DO NOT include "Here's what you can do right now:" as this is already in the template
-- Make every word count toward personalization
-- Second sentence should add helpful context or reinforce the personalization
-
-Example personalized outputs (showing obvious customization with TWO sentences):
-<p class="mobile-text" style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">Thanks for joining Marketgist — since you're focused on <strong>technology growth stocks</strong>, we'll tailor real-time alerts to the exact companies you're tracking so you never miss momentum. Expect concise signals with context to help you act early, aligned with your goals and risk comfort.</p>
-
-<p class="mobile-text" style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">Great to have you aboard! Perfect for your <strong>conservative retirement strategy</strong> — we'll help you monitor dividend stocks without overwhelming you with noise. You can finally track your portfolio progress with confidence and clarity.</p>
-
-<p class="mobile-text" style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">You're all set! Since you're new to investing, we've designed simple tools to help you build confidence while learning the <strong>healthcare sector</strong> you're interested in. Our beginner-friendly alerts will guide you without the confusing jargon.</p>`;
-
-export const NEWS_SUMMARY_EMAIL_PROMPT = `Generate HTML content for a market news summary email that will be inserted into the NEWS_SUMMARY_EMAIL_TEMPLATE at the {{newsContent}} placeholder.
-
-News data to summarize:
+News articles (JSON):
 {{newsData}}
 
-CRITICAL FORMATTING REQUIREMENTS:
-- Return ONLY clean HTML content with NO markdown, NO code blocks, NO backticks
-- Structure content with clear sections using proper HTML headings and paragraphs
-- Use these specific CSS classes and styles to match the email template:
+Content rules:
+- Use only facts that appear in the articles. Do not add numbers, prices, dates or causes that the articles don't state. If an article is thin, say less.
+- Group the articles into two to four sections, such as Market overview, Companies on your watchlist, Earnings, or Economy. Use each section name once. Skip sections with no articles.
+- For each article: its headline rewritten in plain English, two or three short bullet points that explain what happened and why it matters, one "Bottom line" sentence, and a link to the article's url.
+- Explain any finance term the first time you use it, in a few words.
+- Write plainly and calmly: no hype, no exclamation marks, no em dashes, no emoji.
+- Never tell the reader to buy, sell or hold anything. Describe what happened and what it could mean.
 
-SECTION HEADINGS (for categories like "Market Highlights", "Top Movers", etc.):
-<h3 class="mobile-news-title dark-text" style="margin: 30px 0 15px 0; font-size: 18px; font-weight: 600; color: #f8f9fa; line-height: 1.3;">Section Title</h3>
+Output format: HTML using only these tags, with no attributes except href on links. No classes, no inline styles, no divs, no markdown, no code fences. The email applies its own styling.
+- <h3> for a section name
+- <h4> for an article headline
+- <ul> and <li> for the bullet points
+- <blockquote><strong>Bottom line:</strong> one sentence.</blockquote>
+- <p><a href="ARTICLE_URL">Read the full story</a></p>
+- <hr> between articles, but not after the last one
 
-PARAGRAPHS (for news content):
-<p class="mobile-text dark-text-secondary" style="margin: 0 0 20px 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">Content goes here</p>
-
-STOCK/COMPANY MENTIONS:
-<strong style="color: #9ecf2e;">Stock Symbol</strong> for ticker symbols
-<strong style="color: #CCDADC;">Company Name</strong> for company names
-
-PERFORMANCE INDICATORS:
-Use 📈 for gains, 📉 for losses, 📊 for neutral/mixed
-
-NEWS ARTICLE STRUCTURE:
-For each individual news item within a section, use this structure:
-1. Article container with visual styling and icon
-2. Article title as a subheading
-3. Key takeaways in bullet points (2-3 actionable insights)
-4. "What this means" section for context
-5. "Read more" link to the original article
-6. Visual divider between articles
-
-ARTICLE CONTAINER:
-Wrap each article in a clean, simple container:
-<div class="dark-info-box" style="background-color: #212328; padding: 24px; margin: 20px 0; border-radius: 8px;">
-
-ARTICLE TITLES:
-<h4 class="dark-text" style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #FFFFFF; line-height: 1.4;">
-Article Title Here
-</h4>
-
-BULLET POINTS (minimum 3 concise insights):
-Use this format with clear, concise explanations (no label needed):
-<ul style="margin: 16px 0 20px 0; padding-left: 0; margin-left: 0; list-style: none;">
-  <li class="dark-text-secondary" style="margin: 0 0 16px 0; padding: 0; margin-left: 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">
-    Clear, concise explanation in simple terms that's easy to understand quickly.
-  </li>
-  <li class="dark-text-secondary" style="margin: 0 0 16px 0; padding: 0; margin-left: 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">
-    Brief explanation with key numbers and what they mean in everyday language.
-  </li>
-  <li class="dark-text-secondary" style="margin: 0 0 16px 0; padding: 0; margin-left: 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">
-    Simple takeaway about what this means for regular people's money.
-  </li>
+Example of one section with one article:
+<h3>Companies on your watchlist</h3>
+<h4>Apple's quarterly sales beat forecasts</h4>
+<ul>
+<li>Apple reported higher iPhone and services sales than analysts expected for the quarter.</li>
+<li>Services, which include the App Store and iCloud, grew faster than hardware.</li>
 </ul>
-
-INSIGHT SECTION:
-Add simple context explanation:
-<div style="background-color: #141414; border: 1px solid #374151; padding: 15px; border-radius: 6px; margin: 16px 0;">
-<p class="dark-text-secondary" style="margin: 0; font-size: 14px; color: #CCDADC; line-height: 1.4;">💡 <strong style="color: #9ecf2e;">Bottom Line:</strong> Simple explanation of why this news matters to your money in everyday language.</p>
-</div>
-
-READ MORE BUTTON:
-<div style="margin: 20px 0 0 0;">
-<a href="ARTICLE_URL" style="color: #9ecf2e; text-decoration: none; font-weight: 500; font-size: 14px; display: block;" target="_blank" rel="noopener noreferrer">Read Full Story →</a>
-</div>
-<br />
-<br />
-
-ARTICLE DIVIDER:
-Close each article container:
-</div>
-
-SECTION DIVIDERS:
-Between major sections, use:
-<div style="border-top: 1px solid #374151; margin: 32px 0 24px 0;"></div>
-
-Content guidelines:
-- Organize news into logical sections with icons (📊 Market Overview, 📈 Top Gainers, 📉 Top Losers, 🔥 Breaking News, 💼 Earnings Reports, 🏛️ Economic Data, etc.)
-- NEVER repeat section headings - use each section type only once per email
-- For each news article, include its actual headline/title from the news data
-- Provide MINIMUM 3 CONCISE bullet points (NO "Key Takeaways" label - start directly with bullets)
-- Each bullet should be SHORT and EASY TO UNDERSTAND - one clear sentence preferred
-- Use PLAIN ENGLISH - avoid jargon, complex financial terms, or insider language
-- Explain concepts as if talking to someone new to investing
-- Include specific numbers but explain what they mean in simple terms
-- Add "Bottom Line" context in everyday language anyone can understand
-- Use clean, light design with yellow bullets for better readability
-- Make each article easy to scan with clear spacing and structure
-- Always include simple "Read Full Story" buttons with actual URLs
-- Focus on PRACTICAL insights regular people can understand and use
-- Explain what the news means for regular investors' money
-- Keep language conversational and accessible to everyone
-- Prioritize BREVITY and CLARITY over detailed explanations
-
-Example structure:
-<h3 class="mobile-news-title dark-text" style="margin: 30px 0 15px 0; font-size: 20px; font-weight: 600; color: #f8f9fa; line-height: 1.3;">📊 Market Overview</h3>
-
-<div class="dark-info-box" style="background-color: #212328; padding: 24px; margin: 20px 0; border-radius: 8px;">
-<h4 class="dark-text" style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #9ecf2e; line-height: 1.4;">
-Stock Market Had Mixed Results Today
-</h4>
-
-<ul style="margin: 16px 0 20px 0; padding-left: 0; margin-left: 0; list-style: none;">
-  <li class="dark-text-secondary" style="margin: 0 0 16px 0; padding: 0; margin-left: 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">
-    Tech stocks like Apple went up 1.2% today, which is good news for tech investors.
-  </li>
-  <li class="dark-text-secondary" style="margin: 0 0 16px 0; padding: 0; margin-left: 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">
-    Traditional companies went down 0.3%, showing investors prefer tech right now.
-  </li>
-  <li class="dark-text-secondary" style="margin: 0 0 16px 0; padding: 0; margin-left: 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">
-    High trading volume (12.4 billion shares) shows investors are confident and active.
-  </li>
-</ul>
-
-<div style="background-color: #141414; border: 1px solid #374151; padding: 15px; border-radius: 6px; margin: 16px 0;">
-<p class="dark-text-secondary" style="margin: 0; font-size: 14px; color: #CCDADC; line-height: 1.4;">💡 <strong style="color: #9ecf2e;">Bottom Line:</strong> If you own tech stocks, today was good for you. If you're thinking about investing, tech companies might be a smart choice right now.</p>
-</div>
-
-<div style="margin: 20px 0 0 0;">
-<a href="https://example.com/article1" style="color: #9ecf2e; text-decoration: none; font-weight: 500; font-size: 14px; display: block;" target="_blank" rel="noopener noreferrer">Read Full Story →</a>
-</div>
-
-<br />
-<br />
-</div>
-
-<div style="border-top: 1px solid #374151; margin: 32px 0 24px 0;"></div>
-
-<h3 class="mobile-news-title dark-text" style="margin: 30px 0 15px 0; font-size: 20px; font-weight: 600; color: #f8f9fa; line-height: 1.3;">📈 Top Gainers</h3>
-
-<div class="dark-info-box" style="background-color: #212328; padding: 24px; margin: 20px 0; border-radius: 8px;">
-<h4 class="dark-text" style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600; color: #9ecf2e; line-height: 1.4;">
-Apple Stock Jumped After Great Earnings Report
-</h4>
-
-<ul style="margin: 16px 0 20px 0; padding-left: 0; margin-left: 0; list-style: none;">
-  <li class="dark-text-secondary" style="margin: 0 0 16px 0; padding: 0; margin-left: 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">
-    Apple stock jumped 5.2% after beating earnings expectations.
-  </li>
-  <li class="dark-text-secondary" style="margin: 0 0 16px 0; padding: 0; margin-left: 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">
-    iPhone sales expected to grow 8% next quarter despite economic uncertainty.
-  </li>
-  <li class="dark-text-secondary" style="margin: 0 0 16px 0; padding: 0; margin-left: 0; font-size: 16px; line-height: 1.6; color: #CCDADC;">
-    App store and services revenue hit $22.3 billion (up 14%), providing steady income.
-  </li>
-</ul>
-
-<div style="background-color: #141414; border: 1px solid #374151; padding: 15px; border-radius: 6px; margin: 16px 0;">
-<p class="dark-text-secondary" style="margin: 0; font-size: 14px; color: #CCDADC; line-height: 1.4;">💡 <strong style="color: #9ecf2e;">Bottom Line:</strong> Apple is making money in different ways (phones AND services), so it's a pretty safe stock to own even when the economy gets shaky.</p>
-</div>
-
-<div style="margin: 20px 0 0 0;">
-<a href="https://example.com/article2" style="color: #9ecf2e; text-decoration: none; font-weight: 500; font-size: 14px; display: block;" target="_blank" rel="noopener noreferrer">Read Full Story →</a>
-</div>
-
-<br />
-<br />
-</div>`;
+<blockquote><strong>Bottom line:</strong> More of Apple's income now comes from subscriptions, which tends to be steadier than device sales.</blockquote>
+<p><a href="https://example.com/article">Read the full story</a></p>`;
 
 export const TRADINGVIEW_SYMBOL_MAPPING_PROMPT = `You are an expert in financial markets and trading platforms. Your task is to find the correct TradingView symbol that corresponds to a given Finnhub stock symbol.
 
