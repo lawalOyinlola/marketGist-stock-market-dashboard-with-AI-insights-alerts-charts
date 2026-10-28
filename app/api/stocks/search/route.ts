@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchStocks } from "@/lib/actions/finnhub.actions";
-import { getWatchlistSymbolsByEmail } from "@/lib/actions/watchlist.actions";
+import { getWatchlistSymbolsByEmail } from "@/lib/utils/watchlist-symbols";
 import { getAuth } from "@/lib/better-auth/auth";
 import { headers } from "next/headers";
 import { limitByIp } from "@/lib/utils/rate-limit";
