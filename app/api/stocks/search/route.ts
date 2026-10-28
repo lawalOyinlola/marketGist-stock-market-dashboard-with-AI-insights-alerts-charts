@@ -3,12 +3,17 @@ import { searchStocks } from "@/lib/actions/finnhub.actions";
 import { getWatchlistSymbolsByEmail } from "@/lib/actions/watchlist.actions";
 import { getAuth } from "@/lib/better-auth/auth";
 import { headers } from "next/headers";
+import { limitByIp } from "@/lib/utils/rate-limit";
 
 export async function GET(request: NextRequest) {
   try {
+    // Every call spends Finnhub quota, so cap each IP
+    const limited = await limitByIp("stocks", 120, 60);
+    if (limited) return limited;
+
     // Get search query from URL params
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get("q") || undefined;
+    const query = searchParams.get("q")?.slice(0, 50) || undefined;
 
     // Fetch stock data (user-agnostic, cached)
     const stocks = await searchStocks(query);
