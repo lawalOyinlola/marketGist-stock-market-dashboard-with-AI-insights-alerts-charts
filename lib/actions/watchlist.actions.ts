@@ -2,11 +2,18 @@
 
 import { connectToDatabase } from "@/database/mongoose";
 import { Watchlist } from "@/database/models/watchlist.model";
+import { resolveDataOwner } from "@/lib/utils/user-access";
+import { checkIpRateLimit } from "@/lib/utils/rate-limit";
 
+const SYMBOL_PATTERN = /^[A-Z0-9.:\-]{1,20}$/;
+
+// Trusts `email`, so only call it with an email the server already trusts
+// (a session email, or a stored user in a background job). Never import it
+// into a client component: that would make it a public endpoint.
 export async function getWatchlistSymbolsByEmail(
   email: string
 ): Promise<string[]> {
-  if (!email) return [];
+  if (!email || typeof email !== "string") return [];
 
   try {
     const mongoose = await connectToDatabase();
@@ -47,29 +54,26 @@ export async function addToWatchlist(
   guestEmail?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const mongoose = await connectToDatabase();
-    const db = mongoose.connection.db;
-    if (!db) throw new Error("MongoDB connection not found");
-
-    // Get current user from auth
-    const { getAuth } = await import("@/lib/better-auth/auth");
-    const { headers } = await import("next/headers");
-    const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: await headers() });
-
-    // Use authenticated user ID or fall back to guest email
-    let userId: string;
-    if (session?.user) {
-      userId = session.user.id;
-    } else if (guestEmail) {
-      // For guest users, use email as userId
-      userId = guestEmail;
-    } else {
-      return { success: false, error: "User not authenticated" };
+    if (typeof symbol !== "string" || typeof company !== "string") {
+      return { success: false, error: "Invalid stock" };
+    }
+    const normalized = symbol.toUpperCase().trim();
+    if (!SYMBOL_PATTERN.test(normalized)) {
+      return { success: false, error: "Invalid stock symbol" };
     }
 
+    const { allowed } = await checkIpRateLimit("watchlist-write", 60, 600);
+    if (!allowed) {
+      return { success: false, error: "Too many requests. Please slow down." };
+    }
+
+    const owner = await resolveDataOwner(guestEmail);
+    if (!owner) {
+      return { success: false, error: "Please sign in to continue" };
+    }
+    const { userId } = owner;
+
     // Check if already in watchlist
-    const normalized = symbol.toUpperCase().trim();
     const existing = await Watchlist.findOne({ userId, symbol: normalized });
 
     if (existing) {
@@ -80,8 +84,8 @@ export async function addToWatchlist(
     try {
       await Watchlist.create({
         userId,
-        symbol: symbol.toUpperCase(),
-        company: company?.trim?.() || company,
+        symbol: normalized,
+        company: company.trim().substring(0, 100) || normalized,
         addedAt: new Date(),
       });
     } catch (e: unknown) {
@@ -102,36 +106,24 @@ export async function removeFromWatchlist(
   symbol: string,
   guestEmail?: string
 ): Promise<{ success: boolean; error?: string }> {
-  // Validate guest email format if provided
-  if (guestEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
-    return { success: false, error: "Invalid email format" };
-  }
-
   try {
-    const mongoose = await connectToDatabase();
-    const db = mongoose.connection.db;
-    if (!db) throw new Error("MongoDB connection not found");
+    if (typeof symbol !== "string") {
+      return { success: false, error: "Invalid stock symbol" };
+    }
 
-    // Get current user from auth
-    const { getAuth } = await import("@/lib/better-auth/auth");
-    const { headers } = await import("next/headers");
-    const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: await headers() });
+    const { allowed } = await checkIpRateLimit("watchlist-write", 60, 600);
+    if (!allowed) {
+      return { success: false, error: "Too many requests. Please slow down." };
+    }
 
-    // Use authenticated user ID or fall back to guest email
-    let userId: string;
-    if (session?.user) {
-      userId = session.user.id;
-    } else if (guestEmail) {
-      // For guest users, use email as userId
-      userId = guestEmail;
-    } else {
-      return { success: false, error: "User not authenticated" };
+    const owner = await resolveDataOwner(guestEmail);
+    if (!owner) {
+      return { success: false, error: "Please sign in to continue" };
     }
 
     // Remove from watchlist
     const result = await Watchlist.deleteOne({
-      userId,
+      userId: owner.userId,
       symbol: symbol.toUpperCase(),
     });
 
