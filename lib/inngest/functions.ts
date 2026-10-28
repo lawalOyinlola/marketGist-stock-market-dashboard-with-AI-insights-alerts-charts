@@ -15,7 +15,7 @@ import {
   getAllUsersForNewsEmail,
   getInactiveUsers,
 } from "@/lib/actions/user.actions";
-import { getWatchlistSymbolsByEmail } from "@/lib/actions/watchlist.actions";
+import { getWatchlistSymbolsByEmail } from "@/lib/utils/watchlist-symbols";
 import { getNews } from "@/lib/actions/finnhub.actions";
 import { getFormattedTodayDate } from "@/lib/utils";
 import { NEWS_FALLBACK_CONTENT } from "../mailer/templates";
