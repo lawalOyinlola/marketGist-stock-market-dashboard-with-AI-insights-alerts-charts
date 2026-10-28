@@ -3,7 +3,7 @@ import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { connectToDatabase } from "@/database/mongoose";
 import { nextCookies } from "better-auth/next-js";
 import { sendEmail } from "@/lib/mailer";
-import { PASSWORD_RESET_EMAIL_TEMPLATE } from "@/lib/mailer/templates";
+import { passwordResetEmail } from "@/lib/mailer/templates";
 
 type MongoDb = Parameters<typeof mongodbAdapter>[0];
 
@@ -28,18 +28,10 @@ const createAuth = (db: MongoDb, secret: string, baseURL: string) =>
           reset.searchParams.set("token", token);
           const resetUrl = reset.toString();
 
-          // Use the professional email template
-          const htmlTemplate = PASSWORD_RESET_EMAIL_TEMPLATE.replace(
-            /\{\{resetUrl\}\}/g,
-            resetUrl
-          );
-
           await sendEmail({
             fromName: "Marketgist",
             to: user.email,
-            subject: "Reset Your Password - Marketgist",
-            html: htmlTemplate,
-            text: `Reset your password by clicking this link: ${resetUrl}`,
+            ...passwordResetEmail({ resetUrl, appUrl: base }),
           });
         } catch (error) {
           console.error("Failed to send password reset email:", error);

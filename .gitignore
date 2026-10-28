@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# rendered email previews (pnpm email:preview)
+/.email-previews/
+
 # next.js
 /.next/
 /out/
