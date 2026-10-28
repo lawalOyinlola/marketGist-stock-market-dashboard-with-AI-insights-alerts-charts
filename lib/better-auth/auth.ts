@@ -2,8 +2,8 @@ import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { connectToDatabase } from "@/database/mongoose";
 import { nextCookies } from "better-auth/next-js";
-import { transporter } from "@/lib/nodemailer";
-import { PASSWORD_RESET_EMAIL_TEMPLATE } from "@/lib/nodemailer/templates";
+import { sendEmail } from "@/lib/mailer";
+import { PASSWORD_RESET_EMAIL_TEMPLATE } from "@/lib/mailer/templates";
 
 type MongoDb = Parameters<typeof mongodbAdapter>[0];
 
@@ -34,8 +34,8 @@ const createAuth = (db: MongoDb, secret: string, baseURL: string) =>
             resetUrl
           );
 
-          await transporter.sendMail({
-            from: `"Marketgist" <${process.env.NODEMAILER_EMAIL}>`,
+          await sendEmail({
+            fromName: "Marketgist",
             to: user.email,
             subject: "Reset Your Password - Marketgist",
             html: htmlTemplate,

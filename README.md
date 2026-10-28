@@ -53,7 +53,7 @@ A comprehensive stock market tracker with AI integration, real-time charts, pers
 - **Better Auth** - Authentication system
 - **MongoDB + Mongoose** - Database and ODM
 - **Inngest** - Background job processing
-- **Nodemailer** - Email service
+- **Resend** - Email service
 - **Finnhub API** - Stock market data
 
 ### Key Libraries
@@ -86,7 +86,7 @@ stocks/
 │   ├── actions/          # Server actions
 │   ├── better-auth/      # Auth configuration
 │   ├── inngest/          # Background jobs
-│   └── nodemailer/       # Email templates
+│   └── mailer/           # Resend client and email templates
 ├── hooks/                # Custom React hooks
 └── types/                # TypeScript definitions
 ```
@@ -138,7 +138,7 @@ stocks/
 - pnpm 10 (version pinned in `packageManager` in `package.json`)
 - MongoDB database
 - Cloudflare account (for Inngest)
-- Gmail account (for Nodemailer)
+- Resend account with a verified sending domain
 
 ### Environment Variables
 
@@ -158,9 +158,10 @@ FINNHUB_API_KEY=your-finnhub-api-key
 # Google Gemini AI
 GEMINI_API_KEY=your-gemini-api-key
 
-# Email (Nodemailer)
-NODEMAILER_EMAIL=your-email@gmail.com
-NODEMAILER_PASSWORD=your-app-password
+# Email (Resend)
+RESEND_API_KEY=your-resend-api-key
+# Bare address on a domain verified in Resend. The app adds the display name.
+EMAIL_FROM=alerts@your-verified-domain.com
 
 # Inngest
 # Local dev: INNGEST_DEV=1 with the Inngest Dev Server running.
