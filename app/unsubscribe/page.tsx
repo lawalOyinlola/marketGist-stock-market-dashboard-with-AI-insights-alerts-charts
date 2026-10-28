@@ -8,6 +8,7 @@ import Link from "next/link";
 function UnsubscribeContent() {
   const searchParams = useSearchParams();
   const email = searchParams.get("email");
+  const token = searchParams.get("token");
   const [status, setStatus] = useState<"loading" | "success" | "error">(
     "loading"
   );
@@ -15,7 +16,7 @@ function UnsubscribeContent() {
 
   useEffect(() => {
     const unsubscribe = async () => {
-      if (!email) {
+      if (!email || !token) {
         setStatus("error");
         setMessage("Invalid unsubscribe link. Please contact support.");
         return;
@@ -27,7 +28,7 @@ function UnsubscribeContent() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({ email, token }),
         });
 
         const data = await response.json();
@@ -48,7 +49,7 @@ function UnsubscribeContent() {
     };
 
     unsubscribe();
-  }, [email]);
+  }, [email, token]);
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
