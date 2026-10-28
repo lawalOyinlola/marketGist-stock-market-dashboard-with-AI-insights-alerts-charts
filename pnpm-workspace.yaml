@@ -1,7 +1,37 @@
-# ignoredBuiltDependencies:
-#   - sharp
-#   - unrs-resolver
+# Packages whose install scripts pnpm may run. Every other dependency's
+# postinstall is blocked, so a compromised transitive package can't execute
+# code on install.
+allowBuilds:
+  # Native Tailwind CSS engine used by @tailwindcss/postcss.
+  "@tailwindcss/oxide": true
+  # These ship prebuilt binaries or need no build step; their install scripts
+  # stay blocked.
+  sharp: false
+  unrs-resolver: false
+  esbuild: false
+  protobufjs: false
 
-# onlyBuiltDependencies:
-#   - '@tailwindcss/oxide'
-#   - protobufjs
+# Refuse any release younger than 14 days (in minutes). Malicious or broken
+# releases are usually caught and pulled within days; this keeps them out.
+# Matches the Dependabot cooldown in .github/dependabot.yml.
+minimumReleaseAge: 20160
+
+# Security patches younger than 14 days, admitted by exact version only.
+# Each one fixes an advisory reported by `pnpm audit` that has no patched
+# release old enough yet. Remove an entry once its version is 14 days old.
+minimumReleaseAgeExclude:
+  # GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr (critical RCE), GHSA-p3m5-59mp-jv5r
+  - next@16.4.2
+  - "@next/env@16.4.2"
+  - "@next/swc-darwin-arm64@16.4.2"
+  - "@next/swc-darwin-x64@16.4.2"
+  - "@next/swc-linux-x64-gnu@16.4.2"
+  - "@next/swc-linux-x64-musl@16.4.2"
+  - "@next/swc-linux-arm64-gnu@16.4.2"
+  - "@next/swc-linux-arm64-musl@16.4.2"
+  - "@next/swc-win32-x64-msvc@16.4.2"
+  - "@next/swc-win32-arm64-msvc@16.4.2"
+  # GHSA-8c8m-p3m8-cjg8, GHSA-m943-m63m-w62w, GHSA-85x2-q946-cp5h
+  - nodemailer@10.1.7
+  # GHSA-c9rx-x947-fp3h
+  - sanitize-html@2.18.1
