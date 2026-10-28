@@ -3,7 +3,7 @@ import Footer from "@/components/Footer";
 import { getAuth } from "@/lib/better-auth/auth";
 import { headers } from "next/headers";
 import { NotificationPoller } from "@/components/NotificationPoller";
-import { getWatchlistSymbolsByEmail } from "@/lib/actions/watchlist.actions";
+import { getWatchlistSymbolsByEmail } from "@/lib/utils/watchlist-symbols";
 import { getAlertsByEmail } from "@/lib/actions/alert.actions";
 import GuestWrapper from "@/components/GuestWrapper";
 // Defer heavy Finnhub fetches to the client to avoid blocking SSR

@@ -1,22 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { connectToDatabase } from "@/database/mongoose";
 import { EmailPreference } from "@/database/models/emailPreference.model";
+import { verifyUnsubscribeToken } from "@/lib/utils/email";
+import { limitByIp } from "@/lib/utils/rate-limit";
+
+const bodySchema = z.object({
+  email: z.email().max(254),
+  token: z.string().min(1).max(128),
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json();
+    const limited = await limitByIp("unsubscribe", 20, 15 * 60);
+    if (limited) return limited;
 
-    if (!email || typeof email !== "string") {
+    const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Valid email is required" },
+        { error: "Invalid unsubscribe link" },
         { status: 400 }
+      );
+    }
+    const { email, token } = parsed.data;
+
+    if (!verifyUnsubscribeToken(email, token)) {
+      return NextResponse.json(
+        { error: "Invalid unsubscribe link" },
+        { status: 403 }
       );
     }
 
     await connectToDatabase();
 
     // Update or create the unsubscribe preference
-    const preference = await EmailPreference.findOneAndUpdate(
+    await EmailPreference.findOneAndUpdate(
       { email: email.toLowerCase() },
       {
         email: email.toLowerCase(),
@@ -29,7 +47,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Successfully unsubscribed from email notifications",
-      email: preference.email,
     });
   } catch (error) {
     console.error("Unsubscribe error:", error);

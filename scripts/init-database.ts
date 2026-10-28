@@ -35,6 +35,9 @@ import mongoose from "mongoose";
 import "../database/models/watchlist.model";
 import "../database/models/alert.model";
 import "../database/models/notification.model";
+// Unique key and TTL indexes for rate limiting and the audit log
+import "../database/models/rateLimit.model";
+import "../database/models/auditLog.model";
 
 interface DuplicateInfo {
   _id: {

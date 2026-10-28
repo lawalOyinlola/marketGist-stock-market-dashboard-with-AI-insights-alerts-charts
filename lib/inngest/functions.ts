@@ -15,10 +15,11 @@ import {
   getAllUsersForNewsEmail,
   getInactiveUsers,
 } from "@/lib/actions/user.actions";
-import { getWatchlistSymbolsByEmail } from "@/lib/actions/watchlist.actions";
+import { getWatchlistSymbolsByEmail } from "@/lib/utils/watchlist-symbols";
 import { getNews } from "@/lib/actions/finnhub.actions";
 import { getFormattedTodayDate } from "@/lib/utils";
 import { NEWS_FALLBACK_CONTENT } from "../mailer/templates";
+import { maskEmail } from "@/lib/utils/logger";
 
 export const sendSignUpEmail = inngest.createFunction(
   { id: "sign-up-email", triggers: { event: "app/user.created" } },
@@ -65,6 +66,7 @@ export const sendSignUpEmail = inngest.createFunction(
               parts: [{ text: prompt }],
             },
           ],
+          generationConfig: { maxOutputTokens: 512 },
         },
       });
 
@@ -81,7 +83,11 @@ export const sendSignUpEmail = inngest.createFunction(
         try {
           return await sendWelcomeEmail({ email, name, intro: introText });
         } catch (error) {
-          console.error("Failed to send welcome email to:", email, error);
+          console.error(
+            "Failed to send welcome email to:",
+            maskEmail(email),
+            error
+          );
           throw error;
         }
       });
@@ -150,7 +156,11 @@ export const sendDailyNewsSummary = inngest.createFunction(
 
           perUser.push({ user, articles });
         } catch (e) {
-          console.error("daily-news: error preparing user news", user.email, e);
+          console.error(
+            "daily-news: error preparing user news",
+            maskEmail(user.email),
+            e
+          );
           perUser.push({ user, articles: [] });
         }
       }
@@ -163,12 +173,14 @@ export const sendDailyNewsSummary = inngest.createFunction(
       newsContent: string | null;
     }[] = [];
 
-    for (const { user, articles } of results) {
+    for (const [index, { user, articles }] of results.entries()) {
       try {
         // If no articles, provide fallback content
         if (!articles || articles.length === 0) {
           console.log(
-            `No articles found for ${user.email}, using fallback content`
+            `No articles found for ${maskEmail(
+              user.email
+            )}, using fallback content`
           );
 
           userNewsSummaries.push({ user, newsContent: NEWS_FALLBACK_CONTENT });
@@ -180,10 +192,12 @@ export const sendDailyNewsSummary = inngest.createFunction(
           JSON.stringify(articles, null, 2)
         );
 
-        const response = await step.ai.infer(`summarize-news-${user.email}`, {
+        // Step ids show in the Inngest dashboard, so no email in them
+        const response = await step.ai.infer(`summarize-news-${index}`, {
           model: step.ai.models.gemini({ model: "gemini-2.5-flash-lite" }),
           body: {
             contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 2048 },
           },
         });
 
@@ -193,7 +207,11 @@ export const sendDailyNewsSummary = inngest.createFunction(
 
         userNewsSummaries.push({ user, newsContent });
       } catch (error) {
-        console.error("Failed to summarize news for : ", user.email, error);
+        console.error(
+          "Failed to summarize news for:",
+          maskEmail(user.email),
+          error
+        );
         userNewsSummaries.push({ user, newsContent: null });
       }
     }
@@ -241,7 +259,7 @@ export const sendStockAlertUpper = inngest.createFunction(
 
       return {
         success: true,
-        message: `Upper price alert sent for ${symbol} to ${email}`,
+        message: `Upper price alert sent for ${symbol} to ${maskEmail(email)}`,
       };
     } catch (error) {
       console.error("Failed to send upper price alert:", error);
@@ -274,7 +292,7 @@ export const sendStockAlertLower = inngest.createFunction(
 
       return {
         success: true,
-        message: `Lower price alert sent for ${symbol} to ${email}`,
+        message: `Lower price alert sent for ${symbol} to ${maskEmail(email)}`,
       };
     } catch (error) {
       console.error("Failed to send lower price alert:", error);
@@ -323,7 +341,7 @@ export const sendVolumeAlert = inngest.createFunction(
 
       return {
         success: true,
-        message: `Volume alert sent for ${symbol} to ${email}`,
+        message: `Volume alert sent for ${symbol} to ${maskEmail(email)}`,
       };
     } catch (error) {
       console.error("Failed to send volume alert:", error);
@@ -383,7 +401,7 @@ export const sendInactiveUserReminder = inngest.createFunction(
                 return { success: true, email: user.email };
               } catch (error) {
                 console.error(
-                  `Failed to send reminder to ${user.email}:`,
+                  `Failed to send reminder to ${maskEmail(user.email)}:`,
                   error
                 );
                 return { success: false, email: user.email };

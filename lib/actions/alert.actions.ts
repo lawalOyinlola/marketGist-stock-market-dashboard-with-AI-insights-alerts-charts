@@ -2,36 +2,23 @@
 
 import { connectToDatabase } from "@/database/mongoose";
 import { Alert } from "@/database/models/alert.model";
+import { resolveDataOwner } from "@/lib/utils/user-access";
+import { checkIpRateLimit } from "@/lib/utils/rate-limit";
+
+const OBJECT_ID_PATTERN = /^[a-f0-9]{24}$/i;
 
 export async function getAlertsByEmail(email: string): Promise<AlertData[]> {
-  if (!email) return [];
-
   try {
-    const mongoose = await connectToDatabase();
-    const db = mongoose.connection.db;
-    if (!db) throw new Error("MongoDB connection not found");
+    // Signed-in callers get their own alerts; guests only for an email
+    // that has no account
+    const owner = await resolveDataOwner(email);
+    if (!owner) return [];
 
-    // Better Auth stores users in the "user" collection
-    const user = await db
-      .collection("user")
-      .findOne<{ _id?: unknown; id?: string; email?: string }>({ email });
-
-    // Determine userId: authenticated user ID or email for guest users
-    let userId: string;
-    if (user) {
-      userId =
-        (user.id as string) ??
-        (user._id as { toHexString?: () => string })?.toHexString?.() ??
-        (user._id as { toString?: () => string })?.toString?.() ??
-        "";
-    } else {
-      // Guest user - use email as userId
-      userId = email;
-    }
-
-    if (!userId) return [];
-
-    const alerts = await Alert.find({ userId, isActive: true }).lean();
+    await connectToDatabase();
+    const alerts = await Alert.find({
+      userId: owner.userId,
+      isActive: true,
+    }).lean();
     return alerts.map((alert) => ({
       id: String(alert._id),
       symbol: alert.symbol,
@@ -87,8 +74,8 @@ export async function createAlert(
 
     // Normalize and sanitize inputs
     const normalizedSymbol = symbol.toUpperCase().trim();
-    if (!normalizedSymbol) {
-      return { success: false, error: "Symbol cannot be empty" };
+    if (!/^[A-Z0-9.:\-]{1,20}$/.test(normalizedSymbol)) {
+      return { success: false, error: "Invalid stock symbol" };
     }
 
     const sanitizedCompany =
@@ -101,26 +88,16 @@ export async function createAlert(
         ? alertName.trim().substring(0, 100)
         : "";
 
-    const mongoose = await connectToDatabase();
-    const db = mongoose.connection.db;
-    if (!db) throw new Error("MongoDB connection not found");
-
-    // Get current user from auth
-    const { getAuth } = await import("@/lib/better-auth/auth");
-    const { headers } = await import("next/headers");
-    const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: await headers() });
-
-    // Use authenticated user ID or fall back to guest email
-    let userId: string;
-    if (session?.user) {
-      userId = session.user.id;
-    } else if (guestEmail) {
-      // For guest users, use email as userId
-      userId = guestEmail;
-    } else {
-      return { success: false, error: "User not authenticated" };
+    const { allowed } = await checkIpRateLimit("alert-write", 30, 600);
+    if (!allowed) {
+      return { success: false, error: "Too many requests. Please slow down." };
     }
+
+    const owner = await resolveDataOwner(guestEmail);
+    if (!owner) {
+      return { success: false, error: "Please sign in to continue" };
+    }
+    const { userId } = owner;
 
     // Check if similar alert already exists
     const existing = await Alert.findOne({
@@ -166,6 +143,10 @@ export async function removeAlert(
   alertId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    if (typeof alertId !== "string" || !OBJECT_ID_PATTERN.test(alertId)) {
+      return { success: false, error: "Alert not found" };
+    }
+
     const mongoose = await connectToDatabase();
     const db = mongoose.connection.db;
     if (!db) throw new Error("MongoDB connection not found");
@@ -210,11 +191,8 @@ export async function updateAlert(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Input validation
-    if (!alertId || typeof alertId !== "string") {
-      return {
-        success: false,
-        error: "Alert ID is required and must be a string",
-      };
+    if (typeof alertId !== "string" || !OBJECT_ID_PATTERN.test(alertId)) {
+      return { success: false, error: "Alert not found" };
     }
 
     if (!updates || typeof updates !== "object") {
@@ -242,7 +220,11 @@ export async function updateAlert(
     }
 
     if (updates.threshold !== undefined) {
-      if (typeof updates.threshold !== "number" || updates.threshold <= 0) {
+      if (
+        typeof updates.threshold !== "number" ||
+        !Number.isFinite(updates.threshold) ||
+        updates.threshold <= 0
+      ) {
         return { success: false, error: "Threshold must be a positive number" };
       }
       allowedFields.threshold = updates.threshold;
