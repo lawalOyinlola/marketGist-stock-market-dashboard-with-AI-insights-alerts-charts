@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -93,11 +94,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Render every page per request: the CSP nonce from proxy.ts only reaches
+  // pages rendered at request time, and a prerendered page would be blocked
+  await connection();
+
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
