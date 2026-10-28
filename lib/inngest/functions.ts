@@ -10,7 +10,7 @@ import {
   sendStockAlertLowerEmail,
   sendVolumeAlertEmail,
   sendInactiveUserReminderEmail,
-} from "@/lib/nodemailer";
+} from "@/lib/mailer";
 import {
   getAllUsersForNewsEmail,
   getInactiveUsers,
@@ -18,7 +18,7 @@ import {
 import { getWatchlistSymbolsByEmail } from "@/lib/actions/watchlist.actions";
 import { getNews } from "@/lib/actions/finnhub.actions";
 import { getFormattedTodayDate } from "@/lib/utils";
-import { NEWS_FALLBACK_CONTENT } from "../nodemailer/templates";
+import { NEWS_FALLBACK_CONTENT } from "../mailer/templates";
 
 export const sendSignUpEmail = inngest.createFunction(
   { id: "sign-up-email", triggers: { event: "app/user.created" } },

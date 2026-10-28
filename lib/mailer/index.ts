@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import {
   WELCOME_EMAIL_TEMPLATE,
   NEWS_SUMMARY_EMAIL_TEMPLATE,
@@ -6,16 +6,58 @@ import {
   STOCK_ALERT_LOWER_EMAIL_TEMPLATE,
   VOLUME_ALERT_EMAIL_TEMPLATE,
   INACTIVE_USER_REMINDER_EMAIL_TEMPLATE,
-} from "@/lib/nodemailer/templates";
+} from "@/lib/mailer/templates";
 import sanitizeHtml from "sanitize-html";
 import { isUserUnsubscribed, getUnsubscribeUrl } from "@/lib/utils/email";
 
-const { NODEMAILER_EMAIL, NODEMAILER_PASSWORD } = process.env;
+// Resend allows 2 requests per second by default. Space sends out so a loop
+// over many users stays under that, and retry once Resend still says no.
+const MIN_SEND_INTERVAL_MS = 550;
+const MAX_ATTEMPTS = 4;
+let nextSendAt = 0;
+let resendClient: Resend | null = null;
 
-export const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: { user: NODEMAILER_EMAIL, pass: NODEMAILER_PASSWORD },
-});
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getResend = () => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("RESEND_API_KEY must be set");
+  return (resendClient ??= new Resend(apiKey));
+};
+
+type SendEmailOptions = {
+  fromName: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+};
+
+// Resend's SDK returns { error } instead of throwing. Throw here so callers,
+// and Inngest retries, see a failed send as a failure.
+export const sendEmail = async ({ fromName, ...message }: SendEmailOptions) => {
+  const fromAddress = process.env.EMAIL_FROM;
+  if (!fromAddress) throw new Error("EMAIL_FROM must be set");
+
+  for (let attempt = 1; ; attempt++) {
+    const now = Date.now();
+    const wait = Math.max(0, nextSendAt - now);
+    nextSendAt = Math.max(now, nextSendAt) + MIN_SEND_INTERVAL_MS;
+    if (wait > 0) await sleep(wait);
+
+    const { error } = await getResend().emails.send({
+      from: `${fromName} <${fromAddress}>`,
+      ...message,
+    });
+    if (!error) return;
+
+    if (error.name === "rate_limit_exceeded" && attempt < MAX_ATTEMPTS) {
+      await sleep(1000 * attempt);
+      continue;
+    }
+    throw new Error(`Resend ${error.name}: ${error.message}`);
+  }
+};
 
 const sanitizeRich = (html: string) => {
   // First sanitize the HTML
@@ -90,14 +132,14 @@ export const sendWelcomeEmail = async ({
     .replace(/\{\{unsubscribeUrl\}\}/g, unsubscribeUrl);
 
   const mailOptions = {
-    from: `"Marketgist" <${process.env.NODEMAILER_EMAIL}>`,
+    fromName: "Marketgist",
     to: email,
     subject: `Welcome to Marketgist - your stock market toolkit is ready!`,
     text: "Thanks for joining Marketgist",
     html: htmlTemplate,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 export const sendNewsSummaryEmail = async ({
@@ -141,14 +183,14 @@ export const sendNewsSummaryEmail = async ({
     .replace(/\{\{unsubscribeUrl\}\}/g, unsubscribeUrl);
 
   const mailOptions = {
-    from: `"Marketgist News" <${process.env.NODEMAILER_EMAIL}>`,
+    fromName: "Marketgist News",
     to: email,
     subject: `📈 Market News Summary - ${date}`,
     text: `Today's market news summary from Marketgist. Visit ${dashboardUrl} to view your dashboard.`,
     html: htmlTemplate,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 // Stock Price Alert Email (Upper Target)
@@ -195,7 +237,7 @@ export const sendStockAlertUpperEmail = async ({
     .replace(/\{\{unsubscribeUrl\}\}/g, unsubscribeUrl);
 
   const mailOptions = {
-    from: `"Marketgist Alerts" <${process.env.NODEMAILER_EMAIL}>`,
+    fromName: "Marketgist Alerts",
     to: email,
     subject: `📈 Price Alert: ${symbol.replace(
       /[\r\n]/g,
@@ -205,7 +247,7 @@ export const sendStockAlertUpperEmail = async ({
     html: htmlTemplate,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 // Stock Price Alert Email (Lower Target)
@@ -252,7 +294,7 @@ export const sendStockAlertLowerEmail = async ({
     .replace(/\{\{unsubscribeUrl\}\}/g, unsubscribeUrl);
 
   const mailOptions = {
-    from: `"Marketgist Alerts" <${process.env.NODEMAILER_EMAIL}>`,
+    fromName: "Marketgist Alerts",
     to: email,
     subject: `📉 Price Alert: ${symbol.replace(
       /[\r\n]/g,
@@ -262,7 +304,7 @@ export const sendStockAlertLowerEmail = async ({
     html: htmlTemplate,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 // Volume Alert Email
@@ -326,14 +368,14 @@ export const sendVolumeAlertEmail = async ({
     .replace(/\{\{unsubscribeUrl\}\}/g, unsubscribeUrl);
 
   const mailOptions = {
-    from: `"Marketgist Alerts" <${process.env.NODEMAILER_EMAIL}>`,
+    fromName: "Marketgist Alerts",
     to: email,
     subject: `📊 Volume Alert: ${symbol} - ${volumeSpike} Above Normal`,
     text: `Volume Alert: ${symbol} (${company}) has ${volumeSpike} above normal trading activity. Current volume: ${currentVolume}M. Visit ${dashboardUrl} to view your dashboard.`,
     html: htmlTemplate,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 // Inactive User Reminder Email
@@ -368,12 +410,12 @@ export const sendInactiveUserReminderEmail = async ({
     .replace(/\{\{unsubscribeUrl\}\}/g, unsubscribeUrl);
 
   const mailOptions = {
-    from: `"Marketgist" <${process.env.NODEMAILER_EMAIL}>`,
+    fromName: "Marketgist",
     to: email,
     subject: `We Miss You! Your Market Insights Await`,
     text: `We noticed you haven't visited Marketgist in a while. The markets have been moving, and there might be some opportunities you don't want to miss! Visit ${dashboardUrl} to return to your dashboard.`,
     html: htmlTemplate,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
