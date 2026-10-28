@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchJSON } from "@/lib/actions/finnhub.actions";
+import { limitByIp } from "@/lib/utils/rate-limit";
+import { fetchJSON } from "@/lib/utils/finnhub-fetch";
 
 const FINNHUB_BASE_URL = "https://finnhub.io/api/v1";
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
 
 export async function GET(request: NextRequest) {
   try {
+    // Every call spends Finnhub quota, so cap each IP
+    const limited = await limitByIp("stocks", 120, 60);
+    if (limited) return limited;
+
     const { searchParams } = new URL(request.url);
     const symbol = searchParams.get("symbol");
 
-    if (!symbol) {
+    if (!symbol || !/^[A-Za-z0-9.:\-]{1,20}$/.test(symbol)) {
       return NextResponse.json(
-        { error: "Symbol parameter is required" },
+        { error: "A valid symbol parameter is required" },
         { status: 400 }
       );
     }
