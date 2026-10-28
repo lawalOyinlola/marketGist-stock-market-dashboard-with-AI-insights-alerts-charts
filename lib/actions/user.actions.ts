@@ -116,8 +116,8 @@ export const getInactiveUsers = async (): Promise<NewsUser[]> => {
       .find({ expiresAt: { $gte: new Date() } }) // Active sessions only
       .toArray();
 
-    for (const session of sessions as any[]) {
-      const rawUserId = (session as any).userId;
+    for (const session of sessions) {
+      const rawUserId = session.userId;
       const userId: string | undefined =
         typeof rawUserId === "string" ? rawUserId : rawUserId?.toString?.();
       if (!userId) continue;
