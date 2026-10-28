@@ -76,6 +76,9 @@ const ForgotPassword = () => {
         toast.success("Reset link sent!", {
           description: "Check your email for password reset instructions.",
         });
+        // Runs in the submit handler, not during render. The compiler cannot
+        // tell because onSubmit is passed through handleSubmit.
+        // eslint-disable-next-line react-hooks/purity
         const until = Date.now() + 3 * 60 * 1000;
         setCooldownUntil(until);
         if (typeof window !== "undefined")
