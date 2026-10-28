@@ -27,7 +27,11 @@ export async function GET(request: NextRequest) {
     const since = searchParams.get("since"); // ISO timestamp to get notifications after this time
 
     // Build query
-    const query: any = { userId };
+    const query: {
+      userId: string;
+      isRead?: boolean;
+      createdAt?: { $gt: Date };
+    } = { userId };
     if (isRead !== null && isRead !== undefined) {
       query.isRead = isRead === "true";
     }
