@@ -21,8 +21,7 @@ import { getFormattedTodayDate } from "@/lib/utils";
 import { NEWS_FALLBACK_CONTENT } from "../nodemailer/templates";
 
 export const sendSignUpEmail = inngest.createFunction(
-  { id: "sign-up-email" },
-  { event: "app/user.created" },
+  { id: "sign-up-email", triggers: { event: "app/user.created" } },
   async ({ event, step }) => {
     try {
       if (!process.env.GEMINI_API_KEY) {
@@ -103,9 +102,10 @@ export const sendSignUpEmail = inngest.createFunction(
 );
 
 export const sendDailyNewsSummary = inngest.createFunction(
-  { id: "daily-news-summary" },
-  [{ event: "app/send.daily.news" }, { cron: "0 12 * * *" }],
-
+  {
+    id: "daily-news-summary",
+    triggers: [{ event: "app/send.daily.news" }, { cron: "0 12 * * *" }],
+  },
   async ({ step }) => {
     // Step #1: Get all users for news delivery
     const users = await step.run("get-all-users", getAllUsersForNewsEmail);
@@ -222,8 +222,7 @@ export const sendDailyNewsSummary = inngest.createFunction(
 
 // Stock Price Alert Functions
 export const sendStockAlertUpper = inngest.createFunction(
-  { id: "stock-alert-upper" },
-  { event: "app/stock.alert.upper" },
+  { id: "stock-alert-upper", triggers: { event: "app/stock.alert.upper" } },
   async ({ event, step }) => {
     try {
       const { email, symbol, company, currentPrice, targetPrice, timestamp } =
@@ -256,8 +255,7 @@ export const sendStockAlertUpper = inngest.createFunction(
 );
 
 export const sendStockAlertLower = inngest.createFunction(
-  { id: "stock-alert-lower" },
-  { event: "app/stock.alert.lower" },
+  { id: "stock-alert-lower", triggers: { event: "app/stock.alert.lower" } },
   async ({ event, step }) => {
     try {
       const { email, symbol, company, currentPrice, targetPrice, timestamp } =
@@ -290,8 +288,7 @@ export const sendStockAlertLower = inngest.createFunction(
 );
 
 export const sendVolumeAlert = inngest.createFunction(
-  { id: "volume-alert" },
-  { event: "app/volume.alert" },
+  { id: "volume-alert", triggers: { event: "app/volume.alert" } },
   async ({ event, step }) => {
     try {
       const {
@@ -350,8 +347,10 @@ export const sendVolumeAlert = inngest.createFunction(
  * - Email includes personalized call-to-action to return
  */
 export const sendInactiveUserReminder = inngest.createFunction(
-  { id: "inactive-user-reminder" },
-  [{ cron: "0 0 * * 0" }], // Run every 7 days (every Sunday at midnight)
+  {
+    id: "inactive-user-reminder",
+    triggers: [{ cron: "0 0 * * 0" }], // Run every 7 days (every Sunday at midnight)
+  },
   async ({ step }) => {
     try {
       // Get all inactive users (haven't logged in for 30+ days)
@@ -415,8 +414,8 @@ export const monitorStockAlerts = inngest.createFunction(
   {
     id: "monitor-stock-alerts",
     concurrency: 1, // Prevent race conditions by running one instance at a time
+    triggers: [{ cron: "0 * * * *" }], // Every hour on the hour
   },
-  [{ cron: "0 * * * *" }], // Every hour on the hour
   async ({ step }) => {
     const { checkAlertsAndTrigger } = await import(
       "@/lib/actions/alert-monitor.actions"
@@ -426,7 +425,7 @@ export const monitorStockAlerts = inngest.createFunction(
       // Add timeout protection at the action level as well
       return await Promise.race([
         checkAlertsAndTrigger(),
-        new Promise<{ triggered: any[]; errors: string[] }>((resolve) =>
+        new Promise<Awaited<ReturnType<typeof checkAlertsAndTrigger>>>((resolve) =>
           setTimeout(
             () => resolve({ triggered: [], errors: ["Alert check timed out"] }),
             3 * 60 * 1000
