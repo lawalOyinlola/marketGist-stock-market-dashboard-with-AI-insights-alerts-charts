@@ -200,13 +200,21 @@ pnpm run init:db
 pnpm run test:db
 ```
 
-5. **Run development server**
+5. **Start the Inngest Dev Server** (in a separate terminal)
+
+```bash
+npx inngest-cli@latest dev
+```
+
+   Keep `INNGEST_DEV=1` in `.env.local` so the app talks to the Dev Server.
+
+6. **Run development server**
 
 ```bash
 pnpm dev
 ```
 
-6. **Access the application**
+7. **Access the application**
    - Open [http://localhost:3000](http://localhost:3000)
    - Sign up for an account
    - Start tracking stocks!
