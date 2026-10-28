@@ -7,7 +7,9 @@ export function useDebounce(callback: () => void, delay: number) {
   const callbackRef = useRef(callback);
 
   // Update callback ref when callback changes
-  callbackRef.current = callback;
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     return () => {
