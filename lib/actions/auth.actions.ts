@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { isAPIError } from "better-auth/api";
 import { getAuth } from "@/lib/better-auth/auth";
 import { inngest } from "@/lib/inngest/client";
 import { headers } from "next/headers";
@@ -41,6 +42,8 @@ const FIFTEEN_MINUTES = 15 * 60;
 const ONE_HOUR = 60 * 60;
 
 export const signUpWithEmail = async (data: SignUpFormData) => {
+  // Set once input is valid, so the catch block can audit the failure
+  let validEmail: string | undefined;
   try {
     const parsed = signUpSchema.safeParse(data);
     if (!parsed.success) {
@@ -64,6 +67,7 @@ export const signUpWithEmail = async (data: SignUpFormData) => {
       riskTolerance,
       preferredIndustry,
     } = parsed.data;
+    validEmail = email;
 
     const limit = await checkIpRateLimit("sign-up", 5, ONE_HOUR);
     if (!limit.allowed) {
@@ -114,6 +118,13 @@ export const signUpWithEmail = async (data: SignUpFormData) => {
     return { success: true };
   } catch (e) {
     console.error("Sign up failed:", e);
+    if (validEmail) {
+      await recordAuditEvent({
+        event: "sign_up",
+        success: false,
+        email: validEmail,
+      });
+    }
     const errorMessage = e instanceof Error ? e.message : "Sign up failed";
 
     return {
@@ -134,35 +145,13 @@ export const signInWithEmail = async ({ email, password }: SignInFormData) => {
     return { success: false, error: "Invalid email or password" };
   }
 
-  // Per IP stops one attacker spraying many accounts. Per account stops many
-  // IPs guessing one password. It slows guessing down, it does not lock out.
-  const ipLimit = await checkIpRateLimit("sign-in", 20, FIFTEEN_MINUTES);
-  const accountLimit = await checkRateLimit(
-    `sign-in:email:${email.toLowerCase()}`,
-    10,
-    FIFTEEN_MINUTES
-  );
-  if (!ipLimit.allowed || !accountLimit.allowed) {
-    return {
-      success: false,
-      error: tooManyAttemptsMessage(
-        Math.max(ipLimit.retryAfterSeconds, accountLimit.retryAfterSeconds)
-      ),
-    };
-  }
-
+  // Rate limits and the audit entry for sign-in live in the Better Auth
+  // hooks (lib/better-auth/auth.ts), so /api/auth/sign-in/email gets them too
   try {
     const auth = await getAuth();
     const response = await auth.api.signInEmail({ body: { email, password } });
 
     if (response) {
-      await recordAuditEvent({
-        event: "sign_in",
-        success: true,
-        userId: response.user?.id,
-        email,
-      });
-
       try {
         // Migrate guest data to authenticated user account
         const newUserId = response?.user?.id ?? "";
@@ -179,7 +168,9 @@ export const signInWithEmail = async ({ email, password }: SignInFormData) => {
     return { success: true };
   } catch (e) {
     console.error("Sign in failed", e);
-    await recordAuditEvent({ event: "sign_in", success: false, email });
+    if (isAPIError(e) && e.statusCode === 429) {
+      return { success: false, error: e.message };
+    }
     const errorMessage = e instanceof Error ? e.message : "Sign in failed";
 
     return {
