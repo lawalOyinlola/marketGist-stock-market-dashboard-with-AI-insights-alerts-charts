@@ -1,30 +1,8 @@
 import type { NextConfig } from "next";
 
-const isDev = process.env.NODE_ENV === "development";
-
-// Scripts allow 'unsafe-inline' because Next.js inlines its own bootstrap
-// scripts and this app does not use nonces. Nonces need src/proxy.ts and make
-// every page dynamically rendered. The TradingView widgets load a script from
-// s3.tradingview.com and render inside TradingView iframes.
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${
-    isDev ? " 'unsafe-eval'" : ""
-  } https://s3.tradingview.com`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "frame-src https://*.tradingview.com https://*.tradingview-widget.com",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  "upgrade-insecure-requests",
-].join("; ");
-
+// The Content-Security-Policy is set per request in proxy.ts, because it
+// carries a fresh nonce for every page
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: contentSecurityPolicy },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
