@@ -62,6 +62,12 @@ const toPlainText = (html: string) =>
       .replace(/<\/(p|h3|h4|li|blockquote)>/gi, "$&\n"),
     { allowedTags: [], allowedAttributes: {} },
   )
+    // sanitize-html escapes text on output. Decode &amp; last so an escaped
+    // entity such as "&amp;lt;" is not decoded twice.
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
