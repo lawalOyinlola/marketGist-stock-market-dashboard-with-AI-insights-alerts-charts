@@ -33,7 +33,7 @@ export async function getAlertsByEmail(email: string): Promise<AlertData[]> {
 
     const alerts = await Alert.find({ userId, isActive: true }).lean();
     return alerts.map((alert) => ({
-      id: (alert._id as any).toString(),
+      id: String(alert._id),
       symbol: alert.symbol,
       company: alert.company,
       alertName: alert.alertName,
@@ -149,9 +149,9 @@ export async function createAlert(
       });
 
       return { success: true, alertId: alert._id.toString() };
-    } catch (createError: any) {
+    } catch (createError: unknown) {
       // Handle MongoDB duplicate key errors (race conditions)
-      if (createError.code === 11000) {
+      if ((createError as { code?: unknown })?.code === 11000) {
         return { success: false, error: "Similar alert already exists" };
       }
       throw createError;
@@ -222,7 +222,7 @@ export async function updateAlert(
     }
 
     // Whitelist and validate allowed fields
-    const allowedFields: Record<string, any> = {};
+    const allowedFields: Record<string, unknown> = {};
 
     if (updates.alertName !== undefined) {
       if (typeof updates.alertName !== "string") {
