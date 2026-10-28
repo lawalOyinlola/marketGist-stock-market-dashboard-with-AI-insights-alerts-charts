@@ -295,7 +295,7 @@ const getWatchlistWithDataCached = cache(
       if (!userId) return [];
 
       const { getWatchlistSymbolsByEmail } = await import(
-        "@/lib/actions/watchlist.actions"
+        "@/lib/utils/watchlist-symbols"
       );
       const symbols = await getWatchlistSymbolsByEmail(email);
 
