@@ -1,0 +1,115 @@
+# Runs on every pull request and every push to main, and the dependency audit
+# also runs daily (see the schedule trigger below). Each job below is meant
+# to be a required status check on main (Settings → Branches), so nothing
+# merges until all of them pass.
+#
+# Third-party actions are pinned to a full commit SHA, not a tag: a tag can be
+# moved by whoever controls the action, a SHA can't. Dependabot keeps these
+# SHAs current (see .github/dependabot.yml) and the comment shows the version.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Daily, so an advisory published against unchanged code still fails a run
+  # (and emails the repo owner) instead of waiting for the next push. Only the
+  # audit job runs on this trigger; the code itself has not changed.
+  schedule:
+    - cron: "0 6 * * *" # every day, 06:00 UTC
+  workflow_dispatch:
+
+# Read-only token by default; no job here needs to write anything.
+permissions:
+  contents: read
+
+# The event name keeps a scheduled run and a push to main from cancelling
+# each other, since both run on refs/heads/main.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Lint, typecheck and build
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Matches "engines.node" in package.json.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # Version comes from "packageManager" in package.json
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          cache: true
+
+      # Fails if package.json and pnpm-lock.yaml disagree. Install scripts
+      # run only for the packages listed under allowBuilds in
+      # pnpm-workspace.yaml.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      # No secrets here on purpose. MongoDB, Better Auth, Finnhub, Gemini and
+      # Inngest are all resolved per request, not at build time, so the build
+      # needs no env vars, a fork's PR can't read production credentials and a
+      # missing env var can't break CI.
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      # Fails on a high or critical advisory. Reads pnpm-lock.yaml only;
+      # nothing is installed or executed. Dev dependencies are audited too:
+      # tailwindcss, @tailwindcss/postcss and typescript all run during
+      # `next build`, so they are part of the build supply chain.
+      - name: Audit dependencies
+        run: pnpm audit --audit-level high
+
+      # pnpm applies minimumReleaseAge only while it resolves versions, and
+      # `pnpm install --frozen-lockfile` never checks the lockfile. This reads
+      # pnpm-lock.yaml and fails on any locked version younger than the window
+      # that is not listed under minimumReleaseAgeExclude. It needs no install.
+      - name: Check release age of locked versions
+        run: node scripts/check-release-age.mjs
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Compares the PR's lockfile with the base branch and fails if the PR
+      # adds a package with a known moderate-or-worse advisory. `pnpm audit`
+      # checks the whole tree; this check names what the PR itself adds, so
+      # the reviewer can account for each new package.
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
