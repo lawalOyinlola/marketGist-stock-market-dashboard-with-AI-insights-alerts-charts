@@ -1,6 +1,14 @@
 // Simple logging utility for production
 const isDevelopment = process.env.NODE_ENV === "development";
 
+// Strip CR and LF so user input cannot forge extra log lines.
+export const sanitizeLog = (value: unknown): string =>
+  String(value).replace(/[\r\n]/g, " ");
+
+// Log "j***@example.com" instead of a full address
+export const maskEmail = (email: unknown): string =>
+  sanitizeLog(email).replace(/^(.).*(@.+)$/, "$1***$2");
+
 export const logger = {
   // Always log errors
   error: (message: string, ...args: unknown[]) => {
